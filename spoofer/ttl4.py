@@ -1,21 +1,19 @@
 # -*- coding:utf8 -*-
+import time
+
 from scapy.all import *
 from scapy.layers.dns import DNSRR, DNSQR
-import time
-import sys
-import csv
-import os
-import datetime
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
-from functools import partial
-import threading
 import tqdm
 import netifaces as ni
-import multiprocessing
-from signal2observer import start_sniff, stop_sniff
 
-def get_mac(target_ip):#获取mac地址
+import utils.conf as cf
+import utils.measurement as ms
+import spoofer.signals as signals
+
+
+vps = cf.VPsConfig()
+
+def get_mac(target_ip):
     while True:
         arp = ARP(pdst=target_ip)
         ether = Ether(dst="ff:ff:ff:ff:ff:ff")
@@ -24,40 +22,44 @@ def get_mac(target_ip):#获取mac地址
         if result:
             return result[0][1].hwsrc
 
-user_home = os.path.expanduser('~')
-#创建socket
+#create socket
 skt2 = conf.L2socket()
 skt3 = conf.L3socket()
-#获取网关ip与mac地址
+#get gateway and mac address
 gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
-#预先构建以网帧头部和icmp报文
-data=b'haha'
-etherPkt = raw(Ether(dst=macaddr, type=0x0800))
-icmpPkt = raw(ICMP(id=1459, seq=2636) / data)
+#build packet header
+ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
+icmp_pkt = raw(ICMP(id=1459, seq=2636) / b'haha')
 
-def TTLsend(date, mID, spoofer, observer, targetFile):
-    #向observer发送start信号
-    print('Spoofer: tell observer to start sniff...')
-    start_sniff('ttl', spoofer, observer, date, mID)
-    #开始发包
-    print('Spoofer: TTL send start...')
-    with open(targetFile) as ifile:
+def TTLsend(measurement: ms.Measurement, target_file):
+    #setting
+    observer = vps.get_vp_by_id(measurement.observer_id)
+    interval = 1/measurement.pps
+    #send start signal to observer
+    print('tell observer to start sniff...')
+    signals.observer_start_sniff(measurement)
+    #start sending packets
+    print('start sending ICMP packets...')
+    with open(target_file) as ifile:
         lines = ifile.readlines()
-        for seq in range(0, 3):
+        for _ in range(3):
             for line in tqdm.tqdm(lines, desc='scan icmp: '):
+                start_time = time.time()
                 ttl = 64
                 target = line.strip()
                 #向target发伪造包
-                ipPkt = raw(IP(src=vpInfo[observer]['publicAddr'], dst=target, ttl=ttl, proto=1, len=32))
-                packet = etherPkt + ipPkt + icmpPkt
+                ip_pkt = raw(IP(src=observer.public_addr, dst=target, ttl=ttl, proto=1, len=32))
+                packet = ether_pkt + ip_pkt + icmp_pkt
                 skt2.send(packet)
-                time.sleep(0.0003)
-    print('Spoofer: TTL send end!')
+                end_time = time.time()
+                elapsed = end_time - start_time
+                #control the sending speed
+                if elapsed < interval:
+                    time.sleep(interval - elapsed)
+    print('end sending ICMP packets!')
     time.sleep(30)
-    #向observer发送stop信号
-    print('Spoofer: tell observer to stop sniff...')
-    stop_sniff('ttl', spoofer, observer, date, mID)
-
-if __name__ == "__main__":
-    TTLsend(date='', mID = '0', spoofer='SAV01', observer='FRA1', targetFile='')
+    #send stop signal to observer
+    print('tell observer to stop sniff...')
+    signals.observer_stop_sniff(measurement)
+    #tell analyzer this measurement is done

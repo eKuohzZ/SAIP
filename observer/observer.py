@@ -1,23 +1,22 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request
-import subprocess
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-import S3BucketUtil as s3bu
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
+from flask import Flask, request
+import subprocess
+
+import utils.S3BucketUtil as s3bu
+import utils.conf as cf    
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+data_path = cf.get_data_path()
 
 app = Flask(__name__)
-task_process = None
+app.task_process = None
 
 @app.route('/start_task', methods=['POST'])
 def start_task():
-    global task_process
-    if task_process is None or task_process.poll() is not None:
+    if app.task_process is None or app.task_process.poll() is not None:
         # 从 POST 请求中读取参数
         data = request.get_json()
         if data is None:
@@ -27,20 +26,19 @@ def start_task():
             args = ['python', 'ttl4.py', '--date', data.get('date'), '--mID', data.get('mID'), '--spoofer', data.get('spoofer'), '--observer', data.get('observer')]
         elif data.get('method') == 'tcp':
             args = ['python', 'tcp4.py', '--date', data.get('date'), '--mID', data.get('mID'), '--spoofer', data.get('spoofer'), '--observer', data.get('observer')]
-        task_process = subprocess.Popen(args)
+        app.task_process = subprocess.Popen(args)
         return 'Task {} started successfully'.format(data.get('method'))
     else:
         return 'Task is already running'
 
 @app.route('/stop_task', methods=['POST'])
 def stop_task():
-    global task_process
-    if task_process and task_process.poll() is None:
+    if app.task_process and app.task_process.poll() is None:
         data = request.get_json()
         date = data.get('date')
         mID = data.get('mID')
-        task_process.terminate()
-        task_process = None
+        app.task_process.terminate()
+        app.task_process = None
         if data.get('method') == 'ttl':
             output_file = '{}/measurement_result_ttl-{}-{}.csv'.format(data_path, date, mID)
             up_s3_file = 'saip/measurement_result_ttl/{}/{}.csv.xz'.format(date, mID)
@@ -61,7 +59,10 @@ def stop_task():
         return 'Task stopped successfully'
     else:
         return 'No task is running'
+    
+def run():
+    app.run(host='0.0.0.0', port=39999)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=39999)
+    run()
 

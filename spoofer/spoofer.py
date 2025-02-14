@@ -1,46 +1,54 @@
 # -*- coding: utf-8 -*-
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
+import threading
+
+from flask import Flask, request
+
 import tcp4, ttl4
-import argparse
-import S3BucketUtil as s3bu
+import utils.S3BucketUtil as s3bu
+import utils.conf as cf
+import utils.measurement as ms
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
+#sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+data_path = cf.get_data_path()
+vps = cf.VPsConfig()
 
-def main():
-    #接收参数
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    parser.add_argument('--mID', type=str, help='ID of measurement')
-    parser.add_argument('--method', type=str, help='ttl or tcp')
-    parser.add_argument('--spoofer', type=str, help='name of spoofer')
-    parser.add_argument('--observer', type=str, help='name of observer')
-    date = parser.parse_args().date
-    mID = parser.parse_args().mID
-    method = parser.parse_args().method
-    spooferNam = parser.parse_args().spoofer
-    observerNam = parser.parse_args().observer
-    #从s3下载targetFile
+def run_task(measurement: ms.Measurement):
+    #download hitlist from s3
     s3_buket = s3bu.S3Bucket()
-    if 'ttl' in method:
-            down_s3_file = 'saip/hitlist_icmp/{}.csv'.format(date)
-            down_local_file = '{}/hitlist_icmp-{}.csv'.format(data_path, date)
-    elif 'tcp' in method:
-            down_s3_file = 'saip/hitlist_tcp/{}.csv'.format(date)
-            down_local_file = '{}/hitlist_tcp-{}.csv'.format(data_path, date)
-    print('Spoofer: download hitlist [{}] from s3 to [{}]...'.format(down_s3_file, down_local_file))
-    s3_buket.download_file(down_s3_file, down_local_file)
-    targetFile = down_local_file
-    #根据role和method执行对应探测工作
-    if method == 'tcp':
-        tcp4.TCPsend(date, mID, spooferNam, observerNam, targetFile)
-    elif method == 'ttl':
-        ttl4.TTLsend(date, mID, spooferNam, observerNam, targetFile)
+    if 'ttl' in measurement.method:
+        s3_hitlist_file = 'saip/hitlist_icmp/{}-{}csv'.format(measurement.date, measurement.measurement_id)
+        local_hitlist_file = '{}/hitlist_icmp-{}-{}.csv'.format(data_path, measurement.date, measurement.measurement_id)
+    elif 'tcp' in measurement.method:
+        s3_hitlist_file = 'saip/hitlist_tcp/{}-{}.csv'.format(measurement.date)
+        local_hitlist_file = '{}/hitlist_tcp-{}-{}.csv'.format(data_path, measurement.date)
+    if os.path.exists(local_hitlist_file):
+        print('hitlist file already exist!')
+    else:
+        print('download hitlist [{}] to [{}]...'.format(s3_hitlist_file, local_hitlist_file))
+        s3_buket.download_file(s3_hitlist_file, local_hitlist_file)
+    target_file = local_hitlist_file
+    #run task
+    if measurement.method == 'tcp':
+        tcp4.TCPsend(measurement, target_file)
+    elif measurement.method == 'ttl':
+        ttl4.TTLsend(measurement, target_file)
+
+# app definition
+app = Flask(__name__)
+
+@app.route('/start_measurement', methods=['POST'])
+def start_task():
+    measurement = ms.Measurement.from_dict(request.get_json())
+    threading.Thread(target=run_task, args=(measurement)).start()
+    return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
+        .format(measurement.date, measurement.measurement_id, measurement.method,\
+                vps.get_vp_by_id(measurement.spoofer_id).name, vps.get_vp_by_id(measurement.observer_id).name)
+
+def run(port):
+     app.run(host='0.0.0.0', port=port)
+     return
+
 
 if __name__ == "__main__":
-   main()
+    run()

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import S3BucketUtil as s3bu
+import utils.S3BucketUtil as s3bu
 import argparse
 import os
 import subprocess

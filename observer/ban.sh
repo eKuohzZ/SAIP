@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 定义CSV文件的路径
-CSV_FILE="port_list.csv"
+CSV_FILE="./conf/port_list.csv"
 
 # 检查CSV文件是否存在
 if [ ! -f "$CSV_FILE" ]; then

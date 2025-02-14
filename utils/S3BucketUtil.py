@@ -8,20 +8,14 @@ import math
 import hashlib
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
+from utils.conf import S3_CONFIG
 
 class S3Bucket(object):
     """
     need download boto3 module
     """
     def __init__(self):
-        S3_FILE_CONF = {
-            #"ACCESS_KEY": "F75b8o8HBgVtGzW7",
-            #"SECRET_KEY": "Mn1bOifJ8u6WnyoeV1sWcqv7UmIxvAJW",
-            "ACCESS_KEY": "siKlxRVrztiXqVgJ",
-            "SECRET_KEY": "5rGL7ds3xclIHaSnfoUiT1RU4V9fom4L",
-            "BUCKET_NAME": "kdp",
-            "ENDPOINT_URL": "http://166.111.121.63:59000/",
-        }
+        S3_FILE_CONF = S3_CONFIG
 
         self.access_key = S3_FILE_CONF.get("ACCESS_KEY")
         self.secret_key = S3_FILE_CONF.get("SECRET_KEY")

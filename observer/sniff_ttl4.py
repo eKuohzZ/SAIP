@@ -8,13 +8,13 @@ import os
 import datetime
 import time
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
+from conf.conf import vpInfo
 from functools import partial
 import netifaces as ni
 import dpkt
 import socket
 import  argparse
-import S3BucketUtil as s3bu
+import utils.S3BucketUtil as s3bu
 
 def get_mac(target_ip):
     while True:

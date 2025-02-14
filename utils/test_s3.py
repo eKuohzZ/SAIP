@@ -1,4 +1,4 @@
-import S3BucketUtil as s3bu
+import utils.S3BucketUtil as s3bu
 import os
 user_home = os.path.expanduser('~')
 s3_buket = s3bu.S3Bucket()

@@ -7,7 +7,7 @@ import csv
 import os
 import datetime
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
+from utils.conf import vpInfo
 from functools import partial
 import subprocess
 import argparse

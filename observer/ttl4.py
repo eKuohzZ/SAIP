@@ -8,7 +8,7 @@ import os
 import datetime
 import time
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
+from utils.conf import vpInfo
 import subprocess
 import argparse
 

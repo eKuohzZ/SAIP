@@ -1,21 +1,17 @@
 # -*- coding:utf8 -*-
+import time
+import random
+
 from scapy.all import *
 from scapy.layers.dns import DNSRR, DNSQR
-import time
-import sys
-import csv
-import os
-import datetime
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf import vpInfo
-from functools import partial
-import threading
 import tqdm
 import netifaces as ni
-import subprocess
-import multiprocessing
-import random
-from signal2observer import start_sniff, stop_sniff
+
+import utils.conf as cf
+import utils.measurement as ms
+import spoofer.signals as signals
+
+vps = cf.VPsConfig()
 
 def get_mac(target_ip):
     while True:
@@ -26,21 +22,21 @@ def get_mac(target_ip):
         if result:
             return result[0][1].hwsrc
         
-user_home = os.path.expanduser('~')
 skt2 = conf.L2socket()
 skt3 = conf.L3socket()
 gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
-
 etherPkt = raw(Ether(dst=macaddr, type=0x0800))
 
-def TCPsend(date, mID, spoofer, observer, targetFile):
-    #向observer发送start信号
-    print('Spoofer: tell observer to start sniff...')
-    start_sniff('tcp', spoofer, observer, date, mID)
-    #开始发包
-    print('Spoofer: TCP send start...')
-    with open(targetFile) as ifile:
+def TCPsend(measurement: ms.Measurement, target_file):
+    observer = vps.get_vp_by_id(measurement.observer_id)
+    interval = 1/measurement.pps
+    #send start signal to observer
+    print('tell observer to start sniff...')
+    signals.observer_start_sniff(measurement)
+    #start sending packets
+    print('start sending TCP packets...')
+    with open(target_file) as ifile:
         lines = ifile.readlines()
         random.shuffle(lines)
         for line in tqdm.tqdm(lines):
@@ -49,16 +45,18 @@ def TCPsend(date, mID, spoofer, observer, targetFile):
             dport = int(line.split(',')[1])
             port_list = random.sample(range(40000, 50000), 10)
             for sport in port_list:
-                iptcpPkt = raw(IP(src=vpInfo[observer]['publicAddr'], dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))
-                packet = etherPkt + iptcpPkt
+                start_time = time.time()
+                iptcp_pkt = raw(IP(src=observer.public_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))
+                packet = etherPkt + iptcp_pkt
                 skt2.send(packet)
-                time.sleep(0.004)
-                #time.sleep(0.0003)
-    print('Spoofer: TCP send end!')
+                end_time = time.time()
+                elapsed = end_time - start_time
+                #control the sending speed
+                if elapsed < interval:
+                    time.sleep(interval - elapsed)
+    print('end sending TCP packets!')
     time.sleep(30)
-     #向observer发送stop信号
-    print('Spoofer: tell observer to stop sniff...')
-    stop_sniff('tcp', spoofer, observer, date, mID)
+    #send stop signal to observer
+    print('tell observer to stop sniff...')
+    signals.observer_stop_sniff(measurement)
 
-if __name__ == "__main__":
-    TCPsend(date='', mID='1', spoofer='SAV01', observer='HK1', targetFile='')
