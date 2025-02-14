@@ -1,42 +1,35 @@
 # -*- coding:utf8 -*-
+import argparse
+import subprocess
 from scapy.all import *
 from scapy.layers.dns import DNSRR, DNSQR
-import time
-import sys
-import csv
-import os
-import datetime
-import time
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils.conf import vpInfo
-import subprocess
-import argparse
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
+import utils.conf as cf
 
-def TTLsniff():
+vps = cf.VPsConfig()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+def ttl_sniff():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    parser.add_argument('--mID', type=str, help='ID of measurement')
-    parser.add_argument('--spoofer', type=str, help='name of spoofer')
-    parser.add_argument('--observer', type=str, help='name of observer')
+    parser.add_argument('--date', type=str, help='YYMMDD')
+    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--spoofer', type=int, help='ID of spoofer')
+    parser.add_argument('--observer', type=int, help='ID of observer')
     date = parser.parse_args().date
     mID = parser.parse_args().mID
-    spoofer = parser.parse_args().spoofer
-    observer = parser.parse_args().observer
-    print('Observer: TTL measure start...')
+    spoofer_id = parser.parse_args().spoofer
+    observer_id = parser.parse_args().observer
+    print('start sniffing ICMP packets...')
+    observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn src not {} and icmp[icmptype] == 0 and icmp[icmpcode] == 0 -w -".format(vpInfo[observer]['netInterface'], vpInfo[observer]['privateAddr'])
-    #icmp包处理脚本
-    command_process = "python3 sniff_ttl4.py --date {} --mID {} --spoofer {} --observer {}".format(date, mID, spoofer, observer)
-    #tcpdump抓包并输送至处理脚本进行处理
+    command_tcpdump = "tcpdump -i {} -nn src not {} and icmp[icmptype] == 0 and icmp[icmpcode] == 0 -w -".format(observer.network_interface, observer.private_addr)
+    #icmp packet process script
+    command_process_script = "python3 {} --date {} --mID {} --spoofer {} --observer {}".format(os.path.join(current_dir, 'sniff_ttl4.py'), date, mID, spoofer_id, observer_id)
+    #tcpdump sniffing and send to process script
     process_tcpdump = subprocess.Popen(command_tcpdump, shell=True, stdout=subprocess.PIPE)
-    process_process = subprocess.Popen(command_process, shell=True, stdin=process_tcpdump.stdout)
-    process_process.wait()
-    print('Observer: TTL measure end!')
+    process_process_script = subprocess.Popen(command_process_script, shell=True, stdin=process_tcpdump.stdout)
+    process_process_script.wait()
+    print('end sniffing ICMP packets!')
 
-if __name__ == "__main__":
-    TTLsniff()
+if __name__ == '__main__':
+    ttl_sniff()

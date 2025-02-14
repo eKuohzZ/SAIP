@@ -1,20 +1,18 @@
 # -*- coding:utf8 -*-
-from scapy.all import *
-from scapy.layers.dns import DNSRR, DNSQR
-import time
 import sys
 import csv
-import os
-import datetime
-import time
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from conf.conf import vpInfo
-from functools import partial
+import socket
+
+from scapy.all import *
+from scapy.layers.dns import DNSRR, DNSQR
 import netifaces as ni
 import dpkt
-import socket
 import  argparse
-import utils.S3BucketUtil as s3bu
+
+import utils.conf as cf
+
+vps = cf.VPsConfig()
+data_path = cf.get_data_path()
 
 def get_mac(target_ip):
     while True:
@@ -25,38 +23,34 @@ def get_mac(target_ip):
         if result:
             return result[0][1].hwsrc
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
-#创建套接字
+# create socket
 skt2 = conf.L2socket()
-#获取网关ip及mac地址
+# get gateway and mac address
 gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
-#预创建以太网帧头部和icmp报文
+# build packet header
 data = 'haha'
-etherPkt = raw(Ether(dst=macaddr, type=0x0800))
-icmpPkt = raw(ICMP(id=1599, seq=2496) / data)
+ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
+icmp_pkt = raw(ICMP(id=1599, seq=2496) / data)
 
 def process_ttl():
-    #接收参数
     parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    parser.add_argument('--mID', type=str, help='ID of measurement')
-    parser.add_argument('--spoofer', type=str, help='name of spoofer')
-    parser.add_argument('--observer', type=str, help='name of observer')
+    parser.add_argument('--date', type=str, help='YYMMDD')
+    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--spoofer', type=int, help='ID of spoofer')
+    parser.add_argument('--observer', type=int, help='ID of observer')
     date = parser.parse_args().date
-    mID = parser.parse_args().mID
-    spoofer = parser.parse_args().spoofer
-    observer = parser.parse_args().observer
-    #定义输出文件
-    output_file = '{}/measurement_result_ttl-{}-{}.csv'.format(data_path, date, mID)
-    ofile = open(output_file, 'w', newline='')
-    writer = csv.writer(ofile)
-    #接收来自tcpdump的输入
+    measurement_id = parser.parse_args().mID
+    spoofer_id = parser.parse_args().spoofer
+    observer_id = parser.parse_args().observer
+    observer = vps.get_vp_by_id(observer_id)
+    # define output file
+    local_ttl_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, date, measurement_id, spoofer_id, observer_id)
+    output_file = open(local_ttl_result_file, 'w', newline='')
+    writer = csv.writer(output_file)
+    # receive data from tcpdump
     pcap = dpkt.pcap.Reader(sys.stdin.buffer)
-    for timestamp, buf in pcap:
+    for _, buf in pcap:
         try:
             eth = dpkt.ethernet.Ethernet(buf)
             ip = eth.data
@@ -69,14 +63,13 @@ def process_ttl():
             writer.writerow([ip_src, str(icmp_id), str(icmp_seq), ip_ttl])
             if icmp_id == 1459 or icmp_seq == 2636:
                 #ping Target
-                ipPkt = raw(IP(src=vpInfo[observer]['privateAddr'], dst=ip_src, proto=1, len=32, ttl=64))
-                packet = etherPkt + ipPkt + icmpPkt
+                ip_pkt = raw(IP(src=observer.private_addr, dst=ip_src, proto=1, len=32, ttl=64))
+                packet = ether_pkt + ip_pkt + icmp_pkt
                 skt2.send(packet)
         except:
             pass 
 
-    ofile.close()
+    output_file.close()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     process_ttl()

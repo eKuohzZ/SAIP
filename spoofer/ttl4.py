@@ -32,7 +32,7 @@ macaddr = get_mac(gateway)
 ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
 icmp_pkt = raw(ICMP(id=1459, seq=2636) / b'haha')
 
-def TTLsend(measurement: ms.Measurement, target_file):
+def ttl_send(measurement: ms.Measurement, target_file):
     #setting
     observer = vps.get_vp_by_id(measurement.observer_id)
     interval = 1/measurement.pps

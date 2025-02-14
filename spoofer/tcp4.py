@@ -28,7 +28,7 @@ gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
 etherPkt = raw(Ether(dst=macaddr, type=0x0800))
 
-def TCPsend(measurement: ms.Measurement, target_file):
+def tcp_send(measurement: ms.Measurement, target_file):
     observer = vps.get_vp_by_id(measurement.observer_id)
     interval = 1/measurement.pps
     #send start signal to observer
@@ -43,7 +43,8 @@ def TCPsend(measurement: ms.Measurement, target_file):
             line = line.strip()
             target = line.split(',')[0]
             dport = int(line.split(',')[1])
-            port_list = random.sample(range(40000, 50000), 10)
+            sample_len = min(cf.get_number_of_ports('tcp'), cf.get_number_of_ports('tcp'))
+            port_list = random.sample(cf.get_tcp_port('tcp'), sample_len)
             for sport in port_list:
                 start_time = time.time()
                 iptcp_pkt = raw(IP(src=observer.public_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))

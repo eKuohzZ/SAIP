@@ -1,68 +1,103 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import threading
+import time
 
 from flask import Flask, request
 import subprocess
 
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf    
+import utils.measurement as ms
 
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 data_path = cf.get_data_path()
+vps = cf.VPsConfig()
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+def post_measurement(measurement: ms.Measurement):
+    if measurement.method == 'ttl':
+        local_measurement_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, measurement.date, measurement.measurement_id, measurement.spoofer_id, measurement.observer_id)
+        s3_measurement_result_file = 'saip/{}/{}/ttl_result/{}-{}.csv.xz'.format(measurement.date, measurement.measurement_id, measurement.spoofer_id, measurement.observer_id)
+        #compress file
+        compress_file = local_measurement_result_file + '.xz'
+        if os.path.exists(compress_file):
+            print('file already exist!')
+        else:
+            subprocess.run(['xz', local_measurement_result_file])
+        #upload file to s3
+        s3_buket = s3bu.S3Bucket()
+        print('upload measurement result [{}] to [{}]...'.format(compress_file, s3_measurement_result_file))
+        s3_buket.upload_files(s3_measurement_result_file, compress_file)
+
+    if measurement.method == 'tcp':
+        args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcpa', '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+        task_tcpa_sniff = subprocess.Popen(args)
+        args = ['python', os.path.join(current_dir, 'tcp4a_send.py'), '--date', measurement.date, '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps]
+        task_tcpa_send = subprocess.Popen(args)
+        task_tcpa_send.wait()
+        time.sleep(120)
+        task_tcpa_sniff.terminate()
+
+        args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+        task_tcps_sniff = subprocess.Popen(args)
+        args = ['python', os.path.join(current_dir, 'tcp4s_send.py'), '--date', measurement.date, '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps//2]
+        task_tcps_send = subprocess.Popen(args)
+        task_tcps_send.wait()
+        time.sleep(120)
+        task_tcps_sniff.terminate()
+
+        for flag in ["", 'a', 's']:
+            local_measurement_result_file = '{}/tcp{}_result-{}-{}-{}-{}.csv'.format(data_path, flag, measurement.date, measurement.measurement_id, measurement.spoofer_id, measurement.observer_id)
+            s3_measurement_result_file = 'saip/{}/{}/tcp{}_result/{}-{}.csv.xz'.format(measurement.date, measurement.measurement_id, flag, measurement.spoofer_id, measurement.observer_id)
+            #compress file
+            compress_file = local_measurement_result_file + '.xz'
+            if os.path.exists(compress_file):
+                print('file already exist!')
+            else:
+                subprocess.run(['xz', local_measurement_result_file])
+            #upload file to s3
+            s3_buket = s3bu.S3Bucket()
+            print('upload measurement result [{}] to [{}]...'.format(compress_file, s3_measurement_result_file))
+            s3_buket.upload_files(s3_measurement_result_file, compress_file)
 
 app = Flask(__name__)
-app.task_process = None
+app.measurement_process = None
 
-@app.route('/start_task', methods=['POST'])
-def start_task():
-    if app.task_process is None or app.task_process.poll() is not None:
-        # 从 POST 请求中读取参数
-        data = request.get_json()
-        if data is None:
+@app.route('/start_measurement', methods=['POST'])
+def start_measurement():
+    if app.measurement_process is None or app.measurement_process.poll() is not None:
+        measurement = ms.Measurement.from_dict(request.get_json())
+        if measurement is None:
             return 'No data provided in request', 400
-        # 构造参数列表
-        if data.get('method') == 'ttl':
-            args = ['python', 'ttl4.py', '--date', data.get('date'), '--mID', data.get('mID'), '--spoofer', data.get('spoofer'), '--observer', data.get('observer')]
-        elif data.get('method') == 'tcp':
-            args = ['python', 'tcp4.py', '--date', data.get('date'), '--mID', data.get('mID'), '--spoofer', data.get('spoofer'), '--observer', data.get('observer')]
-        app.task_process = subprocess.Popen(args)
-        return 'Task {} started successfully'.format(data.get('method'))
+        if measurement.method == 'ttl':
+            args = ['python', os.path.join(current_dir, 'ttl4.py'), '--date', measurement.date, '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+        elif measurement.method == 'tcp':
+            args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcp', '--mID', measurement.measurement_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+        app.measurement_process = subprocess.Popen(args)
+        return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
+        .format(measurement.date, measurement.measurement_id, measurement.method,\
+                vps.get_vp_by_id(measurement.spoofer_id).name, vps.get_vp_by_id(measurement.observer_id).name)
     else:
-        return 'Task is already running'
+        return 'Task is already running!'
 
-@app.route('/stop_task', methods=['POST'])
-def stop_task():
-    if app.task_process and app.task_process.poll() is None:
-        data = request.get_json()
-        date = data.get('date')
-        mID = data.get('mID')
-        app.task_process.terminate()
-        app.task_process = None
-        if data.get('method') == 'ttl':
-            output_file = '{}/measurement_result_ttl-{}-{}.csv'.format(data_path, date, mID)
-            up_s3_file = 'saip/measurement_result_ttl/{}/{}.csv.xz'.format(date, mID)
-        elif data.get('method') == 'tcp':
-            output_file = '{}/measurement_result_tcp-{}-{}.csv'.format(data_path, date, mID)
-            up_s3_file = 'saip/measurement_result_tcp/{}/{}.csv.xz'.format(date, mID)
-        #压缩
-        compress_file = output_file + '.xz'
-        if os.path.exists(compress_file):
-            print('Observer: file already exist!')
-        else:
-            subprocess.run(['xz', output_file])
-        #上传到s3
-        s3_buket = s3bu.S3Bucket()
-        print('Analyzer: upload measurement_result [{}] to s3...'.format(up_s3_file))
-        s3_buket.upload_files(up_s3_file, compress_file)
-        subprocess.run(['rm', compress_file])
+@app.route('/stop_measurement', methods=['POST'])
+def stop_measurement():
+    if app.measurement_process and app.measurement_process.poll() is None:
+        measurement = ms.Measurement.from_dict(request.get_json())
+        app.measurement_process.terminate()
+        app.measurement_process = None
+        threading.Thread(target=post_measurement, args=(measurement)).start()
         return 'Task stopped successfully'
     else:
         return 'No task is running'
     
-def run():
-    app.run(host='0.0.0.0', port=39999)
-
-if __name__ == '__main__':
-    run()
+def run(port):
+    # ban the output TCP traffic on the selective ports
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    ban_script = os.path.join(current_dir, 'ban.sh')
+    subprocess.run(['chmod', '+x', ban_script])
+    subprocess.run([ban_script])
+    # run the app
+    app.run(host='0.0.0.0', port=port)
 

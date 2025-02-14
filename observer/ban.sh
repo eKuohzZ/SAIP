@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# 定义CSV文件的路径
-CSV_FILE="./conf/port_list.csv"
+# define the path to the CSV file containing the list of ports
+CSV_FILE="./config/port_list.csv"
 
-# 检查CSV文件是否存在
+# check if the CSV file exists
 if [ ! -f "$CSV_FILE" ]; then
   echo "CSV file '$CSV_FILE' not found. Please create the file and add port numbers."
   exit 1
 fi
 
-# 清除已存在的出方向规则，以确保不会重复添加
+# clear existing OUTPUT chain rules
 iptables -F OUTPUT
 
-# 从CSV文件中读取端口号并添加出方向RST拦截规则
+# read the CSV file and add rules to drop RST packets on the specified ports
 while IFS=, read -r port
 do
   if [ -n "$port" ]; then
@@ -21,9 +21,8 @@ do
   fi
 done < "$CSV_FILE"
 
-# 保存iptables规则以便重启后生效
-# 根据你的Linux发行版，使用适当的命令保存iptables规则
-# CentOS/Red Hat
+# save the iptables rules
+# CentOS/RHEL
 service iptables save
 
 # Debian/Ubuntu

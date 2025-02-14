@@ -44,6 +44,7 @@ def end_measurement():
     return 'Measurement ended successfully'
 
 
-def run():
-    return "Hello World"
+def run(port):
+    app.run(host='0.0.0.0', port=port)
+
 

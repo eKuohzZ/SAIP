@@ -4,6 +4,7 @@ Configuration file for SAIP
 
 import csv
 import os
+import random
 
 # Input data path
 if_download_data = True
@@ -98,3 +99,39 @@ def get_data_path():
 
 def if_download_data():
     return if_download_data
+
+def get_tcp_port(method):
+    port_file = "config/port_list.csv"
+    try:
+        with open(port_file, 'r') as f:
+            ports = [int(port.strip()) for port in f.readlines()]
+        random.shuffle(ports)
+        
+        group_size = len(ports) // 3
+        tcp_ports = ports[:group_size]
+        tcps_ports = ports[group_size:2*group_size]
+        tcpa_ports = ports[2*group_size:]
+        
+        if method == 'tcp':
+            return tcp_ports
+        elif method == 'tcps':
+            return tcps_ports
+        elif method == 'tcpa':
+            return tcpa_ports
+        else:
+            return []
+    except FileNotFoundError:
+        print(f"Error: {port_file} not found")
+        return []
+    except ValueError:
+        print(f"Error: Invalid port number in {port_file}")
+        return []
+    
+def get_number_of_ports(method):
+    if method == 'tcp':
+        return 10
+    elif method == 'tcps':
+        return 10
+    elif method == 'tcpa':
+        return 10
+    

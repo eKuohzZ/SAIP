@@ -46,7 +46,7 @@ def build_hitlist(date, measurement_id):
         for prefix in prefix2ip:
             print(prefix2ip[prefix], file=ofile)
     #upload icmp hitlist to s3
-    s3_icmp_hitlist_file = 'saip/hitlist_icmp/{}-{}.csv'.format(date, measurement_id)
+    s3_icmp_hitlist_file = 'saip/{}/{}/hitlist_icmp.csv'.format(date, measurement_id)
     print('upload icmp hitlist [{}] to [{}]...'.format(local_icmp_hitlist_file, s3_icmp_hitlist_file))
     s3_buket.upload_files(s3_icmp_hitlist_file, local_icmp_hitlist_file)
     

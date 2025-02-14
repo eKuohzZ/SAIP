@@ -1,19 +1,18 @@
 # -*- coding:utf8 -*-
-from scapy.all import *
-from scapy.layers.dns import DNSRR, DNSQR
-import time
 import sys
 import csv
-import os
-import datetime
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from utils.conf import VPS
-from functools import partial
+import socket
+
+from scapy.all import *
+from scapy.layers.dns import DNSRR, DNSQR
 import netifaces as ni
 import dpkt
-import socket
 import argparse
-import utils.S3BucketUtil as s3bu
+
+import utils.conf as cf
+
+vps = cf.VPsConfig()
+data_path = cf.get_data_path()
 
 def get_mac(target_ip):
     while True:
@@ -24,11 +23,6 @@ def get_mac(target_ip):
         if result:
             return result[0][1].hwsrc
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
-
 skt2 = conf.L2socket()
 skt3 = conf.L3socket()
 gateway = ni.gateways()['default'][ni.AF_INET][0]
@@ -36,10 +30,8 @@ macaddr = get_mac(gateway)
 
 etherPkt = raw(Ether(dst=macaddr, type=0x0800))
 
-port_list = [i for i in range(40000, 50000)]
-
 def tcp_flags_str(flags):
-    # 定义TCP标志名称及其对应的位掩码值
+    # define a list of tuples, each containing a flag name and its corresponding bitmask
     flags_names = [
         ('F', dpkt.tcp.TH_FIN),
         ('S', dpkt.tcp.TH_SYN),
@@ -50,29 +42,31 @@ def tcp_flags_str(flags):
         ('E', dpkt.tcp.TH_ECE),
         ('C', dpkt.tcp.TH_CWR)
     ]
-
-    # 遍历所有标志，如果标志位被设置，则将其名称添加到列表中
+    # iterate over the list of tuples and check if the flag is set
     active_flags = [name for name, bitmask in flags_names if flags & bitmask != 0]
-
-    # 将标志名称连接为字符串并返回
+    # return a string containing all the flags that are set
     return ''.join(active_flags)
 
 def process_tcp():
-    #接收参数
     parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    parser.add_argument('--mID', type=str, help='ID of measurement')
-    parser.add_argument('--spoofer', type=str, help='name of spoofer')
-    parser.add_argument('--observer', type=str, help='name of observer')
+    parser.add_argument('--date', type=str, help='YYMMDD')
+    parser.add_argument('--method', type=str, help='tcp, tcp_s or tcp_a')
+    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--spoofer', type=int, help='ID of spoofer')
+    parser.add_argument('--observer', type=int, help='ID of observer')
     date = parser.parse_args().date
-    mID = parser.parse_args().mID
-    spoofer = parser.parse_args().spoofer
-    observer = parser.parse_args().observer
-    #定义输出文件
-    output_file = '{}/measurement_result_tcp-{}-{}.csv'.format(data_path, date, mID)
-    ofile = open(output_file, 'w', newline='')
-    writer = csv.writer(ofile)
-    #接收来自tcpdump的输入
+    method = parser.parse_args().method
+    measurement_id = parser.parse_args().mID
+    spoofer_id = parser.parse_args().spoofer
+    observer_id = parser.parse_args().observer
+
+    port_list = cf.get_tcp_port(method)
+    observer = vps.get_vp_by_id(observer_id)
+    # define output file
+    local_tcp_result_file = '{}/{}_result-{}-{}-{}-{}.csv'.format(data_path, method, date, measurement_id, spoofer_id, observer_id)
+    output_file = open(local_tcp_result_file, 'w', newline='')
+    writer = csv.writer(output_file)
+    # receive data from tcpdump
     pcap = dpkt.pcap.Reader(sys.stdin.buffer)
     for timestamp, buf in pcap:
         try:
@@ -88,21 +82,19 @@ def process_tcp():
             tcp_seq = tcp.seq
             tcp_flags = tcp_flags_str(tcp.flags)
             if tcp_dport in port_list:
-                #第二次握手
+                # send ACK (second handshake)
                 if tcp_flags == 'SA' and tcp_ack == 1001:
                     data = (
                         b"Hello"
                     )
-                    iptcpPkt = raw(IP(src=vpInfo[observer]['privateAddr'], dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data))
+                    iptcpPkt = raw(IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data))
                     packet = etherPkt + iptcpPkt    
                     skt2.send(packet)
                 writer.writerow([tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp])
         except:
             pass
         
-    ofile.close()
+    output_file.close()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     process_tcp()
-    
