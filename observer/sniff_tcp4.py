@@ -51,19 +51,19 @@ def process_tcp():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', type=str, help='YYMMDD')
     parser.add_argument('--method', type=str, help='tcp, tcp_s or tcp_a')
-    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--mID', type=int, help='ID of experiment')
     parser.add_argument('--spoofer', type=int, help='ID of spoofer')
     parser.add_argument('--observer', type=int, help='ID of observer')
     date = parser.parse_args().date
     method = parser.parse_args().method
-    measurement_id = parser.parse_args().mID
+    experiment_id = parser.parse_args().mID
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
 
     port_list = cf.get_tcp_port(method)
     observer = vps.get_vp_by_id(observer_id)
     # define output file
-    local_tcp_result_file = '{}/{}_result-{}-{}-{}-{}.csv'.format(data_path, method, date, measurement_id, spoofer_id, observer_id)
+    local_tcp_result_file = '{}/{}_result-{}-{}-{}-{}.csv'.format(data_path, method, date, experiment_id, spoofer_id, observer_id)
     output_file = open(local_tcp_result_file, 'w', newline='')
     writer = csv.writer(output_file)
     # receive data from tcpdump

@@ -36,16 +36,16 @@ icmp_pkt = raw(ICMP(id=1599, seq=2496) / data)
 def process_ttl():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', type=str, help='YYMMDD')
-    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--mID', type=int, help='ID of experiment')
     parser.add_argument('--spoofer', type=int, help='ID of spoofer')
     parser.add_argument('--observer', type=int, help='ID of observer')
     date = parser.parse_args().date
-    measurement_id = parser.parse_args().mID
+    experiment_id = parser.parse_args().mID
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
     observer = vps.get_vp_by_id(observer_id)
     # define output file
-    local_ttl_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, date, measurement_id, spoofer_id, observer_id)
+    local_ttl_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, date, experiment_id, spoofer_id, observer_id)
     output_file = open(local_ttl_result_file, 'w', newline='')
     writer = csv.writer(output_file)
     # receive data from tcpdump

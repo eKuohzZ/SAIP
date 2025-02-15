@@ -8,7 +8,7 @@ import netifaces as ni
 
 import utils.conf as cf
 import utils.measurement as ms
-import spoofer.signals as signals
+import signals
 
 
 vps = cf.VPsConfig()

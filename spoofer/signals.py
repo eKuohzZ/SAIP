@@ -12,7 +12,3 @@ def observer_start_sniff(measurement: ms.Measurement):
 def observer_stop_sniff(measurement: ms.Measurement):
     vp = vps.get_vp_by_id(measurement.observer_id)
     response = requests.post('http://{}:{}/stop_measurement'.format(vp.public_addr, vp.port), json=measurement.dict)
-
-def analyzer_measurment_end(measurement: ms.Measurement):
-    vp = vps.get_analyzer
-    response = requests.post('http://{}:{}/end_measurement'.format(vp.public_addr, vp.port), json=measurement.dict)

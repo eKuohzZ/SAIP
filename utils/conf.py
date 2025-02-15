@@ -5,6 +5,7 @@ Configuration file for SAIP
 import csv
 import os
 import random
+import datetime
 
 # Input data path
 if_download_data = True
@@ -71,23 +72,23 @@ class VPsConfig:
     def get_vp_by_id(self, id) -> VPInfo:
         return self.vps[id]
 
-def get_measurement_id():
-    id_file = "config/current_measurement_id.csv"
+def get_experiment_id():
+    id_file = "config/latest_experiment_id.csv"
     try:
         with open(id_file, 'r') as f:
             current_id = int(f.read().strip())
         new_id = current_id + 1
         with open(id_file, 'w') as f:
             f.write(str(new_id))
-        return str(new_id)
+        return new_id
     except FileNotFoundError:
         with open(id_file, 'w') as f:
             f.write('1')
-        return '1'
+        return 1
     except ValueError:
         with open(id_file, 'w') as f:
             f.write('1')
-        return '1'
+        return 1
     
 def get_data_path():
     work_dir = os.getcwd()
@@ -106,7 +107,7 @@ def get_tcp_port(method):
         with open(port_file, 'r') as f:
             ports = [int(port.strip()) for port in f.readlines()]
         random.shuffle(ports)
-        
+
         group_size = len(ports) // 3
         tcp_ports = ports[:group_size]
         tcps_ports = ports[group_size:2*group_size]
@@ -134,4 +135,8 @@ def get_number_of_ports(method):
         return 10
     elif method == 'tcpa':
         return 10
-    
+
+def get_date():
+    now = datetime.datetime.now()
+    date = now.strftime("%y%m%d")   
+    return date

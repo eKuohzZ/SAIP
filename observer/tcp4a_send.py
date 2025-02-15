@@ -58,16 +58,16 @@ def tcp_send(observer_id, target_file, pps):
 def do_tcp_measure():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', type=str, help='YYMMDD')
-    parser.add_argument('--mID', type=int, help='ID of measurement')
+    parser.add_argument('--mID', type=int, help='ID of experiment')
     parser.add_argument('--spoofer', type=int, help='ID of spoofer')
     parser.add_argument('--observer', type=int, help='ID of observer')
     parser.add_argument('--pps', type=int, help='Packets per second')
     date = parser.parse_args().date
-    measurement_id = parser.parse_args().mID
+    experiment_id = parser.parse_args().mID
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
     pps = parser.parse_args().pps
-    target_file = '{}/hitlist_tcp-{}-{}.csv'.format(data_path, date, measurement_id)
+    target_file = '{}/hitlist_tcp-{}-{}.csv'.format(data_path, date, experiment_id)
     send_process = multiprocessing.Process(target=tcp_send, args=(observer_id, target_file, pps))
     send_process.start()
     send_process.join()

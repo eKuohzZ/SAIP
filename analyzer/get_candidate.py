@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-import utils.S3BucketUtil as s3bu
-import argparse
 import os
+
+import argparse
 import subprocess
 import tqdm
 
-user_home = os.path.expanduser('~')
-data_path = user_home + '/.saip'
-if not os.path.exists(data_path):
-    os.makedirs(data_path)
+import utils.S3BucketUtil as s3bu
+import utils.conf as cf
+
+data_path = cf.get_data_path()
 
 def get_candidate_vp(input_file, date, hitlist):
     target2ttl = {}
@@ -119,8 +119,3 @@ def get_candidate_vps():
     s3_buket.upload_files(up_s3_file, candidate_vps_file)
     up_s3_file = 'saip/ip2do_port_scan/{}.csv'.format(date)
     s3_buket.upload_files(up_s3_file, ip2do_port_scan_file)
-    
-
-        
-if __name__ == '__main__':
-    get_candidate_vps()

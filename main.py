@@ -12,8 +12,8 @@ if __name__ == '__main__':
     role = parser.parse_args().role
     port = parser.parse_args().port
     if role == 'controller':
-        analyzer.run(port)
+        analyzer.main(port)
     elif role == 'observer':
-        observer.run(port)
+        observer.main(port)
     elif role == 'spoofer':
-        spoofer.run(port)
+        spoofer.main(port)
