@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 import os
 
-import argparse
 import subprocess
 import tqdm
 
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 
-data_path = cf.get_data_path()
-
-def get_candidate_vp(input_file, date, hitlist):
+def get_candidate_vp(input_file_dir, input_file_name, date, experiment_id, hitlist):
+    data_path = cf.get_data_path(date, experiment_id)
     target2ttl = {}
-    with open(os.path.join(data_path, input_file)) as ifile:
+    received_target = set()
+    with open(os.path.join(input_file_dir, input_file_name)) as ifile:
         lines = ifile.readlines()
         for line in tqdm.tqdm(lines):
             line = line.strip('\n').split(',')
@@ -20,89 +19,91 @@ def get_candidate_vp(input_file, date, hitlist):
             id = int(line[1])
             seq = int(line[2])
             ttl = int(line[3])
-            if target not in hitlist: continue#不是探测目标
-            if not (id == 1459 or seq == 2636 or id == 1599 or seq == 2496): continue#不符合规范的响应
-            #修正ttl范围为[-64, 64]
+            if target not in hitlist:# not in hitlist
+                if target not in received_target: received_target.add(target)
+                continue
+            if not (id == 1459 or seq == 2636 or id == 1599 or seq == 2496):
+                if target not in received_target: received_target.add(target)
+                continue
             if 64<ttl<=128: ttl -= 64 
             elif 128<ttl<=255: ttl -= 191
             if target not in target2ttl:
-                target2ttl[target] = {'s': -1, 'o': -1}
+                target2ttl[target] = {'sent_by_spoofer': -1, 'sent_by_observer': -1}
             if id == 1459 or seq == 2636:# targetping
-                target2ttl[target]['s'] = ttl
+                target2ttl[target]['sent_by_spoofer'] = ttl
             else:
-                target2ttl[target]['o'] = ttl
-    
-    #判断，将candiadte写入文件
-    input_filename = input_file.split('-')[-1]
-    output_file = '{}/candidate_vp-{}-{}'.format(data_path, date, input_filename)
-    with open(output_file, 'w') as ofile: 
-        for target in target2ttl:
-            if target2ttl[target]['s'] != -1 and target2ttl[target]['o'] != -1:
-                if target2ttl[target]['s'] - target2ttl[target]['o'] != 0: print(target, file=ofile)
-    #文件上传至s3
-    print('Analyzer: upload candidate_vp file [{}] to s3...'.format(output_file))
-    up_s3_file = 'saip/candidate_vp/{}/{}'.format(date, input_filename)
+                target2ttl[target]['sent_by_observer'] = ttl
+    #chcek and write to file
+    candidate_dir = '{}/candidate_vp'.format(data_path)
+    if not os.path.exists(candidate_dir):
+        os.makedirs(candidate_dir)
+    candidate_file = '{}/candidate_vp/{}'.format(candidate_dir, input_file_name)
+    with open(candidate_file, 'w') as ofile: 
+        for target in hitlist:
+            if target in target2ttl and target2ttl[target]['sent_by_spoofer'] == target2ttl[target]['sent_by_observer']: continue
+            print(target, file=ofile)
+    #upload to s3
+    s3_candidate_vp_file = 'saip/{}/{}/candidate_vp/{}'.format(date, experiment_id, input_file_name)
+    print('upload candidate_vp file [{}] to [{}]...'.format(candidate_file, s3_candidate_vp_file))
     s3_buket = s3bu.S3Bucket()
-    s3_buket.upload_files(up_s3_file, output_file)
+    s3_buket.upload_files(s3_candidate_vp_file, candidate_file)
 
 
-def get_candidate_vps():
-    print('Analyzer: filter anycast candidate by saip-ttl...')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    date = parser.parse_args().date
-    #从s3下载ttl_hitlist
-    s3_buket = s3bu.S3Bucket()
-    down_s3_file = 'saip/hitlist_ttl/{}.csv'.format(date)
-    down_local_file = '{}/hitlist_ttl-{}.csv'.format(data_path, date)
-    print('Spoofer: download hitlist [{}] from s3...'.format(down_s3_file))
-    s3_buket.download_file(down_s3_file, down_local_file)
-    #构建hitlist
+def get_candidate_vps(date, experiment_id):
+    data_path = cf.get_data_path(date, experiment_id)
+    print('filter anycast candidate by saip-ttl...')
+    #get icmp hitlist
+    s3_icmp_hitlist_file = 'saip/{}/{}/hitlist_icmp.csv'.format(date, experiment_id)
+    local_icmp_hitlist_file = '{}/hitlist_icmp.csv'.format(data_path)
+    if not os.path.exists(local_icmp_hitlist_file):
+        print('download icmp hitlist [{}] to [{}]...'.format(s3_icmp_hitlist_file, local_icmp_hitlist_file))
+        s3_buket = s3bu.S3Bucket()
+        s3_buket.download_file(s3_icmp_hitlist_file, local_icmp_hitlist_file)
     icmp_hitlist = set()
-    with open('{}/hitlist_icmp-{}.csv'.format(data_path, date)) as ifile:
+    with open(local_icmp_hitlist_file) as ifile:
         lines = ifile.readlines()
         for line in lines:
             line = line.strip()
             icmp_hitlist.add(line)
-    #从s3下载并解压ttl_measurement_result
-    print('Analyzer: download ttl measurement result from s3...')
+    #download ttl measurement result from s3
+    print('download ttl measurement result from s3...')
     s3_buket = s3bu.S3Bucket()
-    ttl_measurement_result_filenames = s3_buket.get_list_s3('saip/measurement_result_ttl/{}'.format(date))
-    for ttl_measurement_result_filename in ttl_measurement_result_filenames:
-        down_local_file = '{}/measurement_result_ttl-{}-{}'.format(data_path, date, ttl_measurement_result_filename)
-        down_s3_file = 'saip/measurement_result_ttl/{}/{}'.format(date, ttl_measurement_result_filename)
-        s3_buket.download_file(down_s3_file, down_local_file)
-        subprocess.run(['xz', '-d', down_local_file])
-    #生成每个vp的candidate结果
-    print('Analyzer: start to filter candidate by saip-ttl...')
-    key_words = 'measurement_result_ttl-{}'.format(date)
-    ttl_measurement_result_filenames = [f for f in os.listdir(data_path) if key_words in f and '.xz' not in f]
-    for ttl_measurement_result_filename in ttl_measurement_result_filenames:
-        get_candidate_vp(ttl_measurement_result_filename, date, icmp_hitlist)
-    #生成总的candidate结果
+    s3_ttl_result_files = s3_buket.get_list_s3('saip/{}/{}/ttl_result'.format(date, experiment_id))
+    local_ttl_result_dir = '{}/ttl_result'.format(data_path)
+    if not os.path.exists(local_ttl_result_dir):
+        os.makedirs(local_ttl_result_dir)
+    for file_name in s3_ttl_result_files:
+        local_ttl_result_file = '{}/ttl_result/{}'.format(data_path, file_name)
+        s3_ttl_result_file = 'saip/{}/{}/ttl_result/{}'.format(date, experiment_id, file_name)
+        s3_buket.download_file(s3_ttl_result_file, local_ttl_result_file)
+        if not os.path.exists(local_ttl_result_file[:-3]):
+            subprocess.run(['xz', '-d', local_ttl_result_file])
+    # get candidate
+    print('start to filter candidate by saip-ttl...')
+    for root, _, files in os.walk(local_ttl_result_dir):
+        for file_name in files:
+            get_candidate_vp(root, file_name, date, experiment_id, icmp_hitlist)
+    # get total candidate
     candidate_vps = set()
-    for filename in os.listdir(data_path):
-        key_words = 'candidate_vp-{}'.format(date)
-        if key_words in filename:
-            with open(os.path.join(data_path, filename)) as ifile:
-                lines = ifile.readlines()
-                for line in lines:
-                    line = line.strip()
-                    if line not in candidate_vps:
-                        candidate_vps.add(line)
-    candidate_vps_file = '{}/candidate_vps-{}.csv'.format(data_path, date)
-    with open(candidate_vps_file, 'w') as ofile:
-        for candidate in candidate_vps:
-            print(candidate, file = ofile)
-    #获取candidate prefix的所有活跃ip
+    candidate_dir = '{}/candidate_vp'.format(data_path)
+    for filename in os.listdir(candidate_dir):
+        with open(os.path.join(candidate_dir, filename)) as ifile:
+            lines = ifile.readlines()
+            for line in lines:
+                line = line.strip()
+                if line not in candidate_vps: candidate_vps.add(line)
+    local_candidate_vps_file = '{}/candidate_vps.csv'.format(data_path)
+    with open(local_candidate_vps_file, 'w') as ofile:
+        for candidate in candidate_vps: print(candidate, file = ofile)
+    #get all active ip of candidate prefix
     candidate_prefix = set()
     for candidate in candidate_vps:
         ll = candidate.split('.')
         prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
         candidate_prefix.add(prefix)
-    active_ipv4_data_file = '{}/active_ipv4-{}.txt'.format(data_path, date)
-    ip2do_port_scan_file = '{}/ip2do_port_scan-{}.csv'.format(data_path, date)
-    with open(ip2do_port_scan_file, 'w') as ofile:
+    active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
+    local_ip2do_port_scan_file = '{}/ip2do_port_scan.csv'.format(data_path)
+    with open(local_ip2do_port_scan_file, 'w') as ofile:
         with open(active_ipv4_data_file) as ifile:
             while True:
                 lines = ifile.readlines(1000000)
@@ -111,11 +112,10 @@ def get_candidate_vps():
                     line = line.strip()
                     ll = line.split('.')
                     prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
-                    if prefix in candidate_prefix:
-                        print(line, file = ofile)
-    #上传至s3
-    print('Analyzer: upload candidate_vps&ip2do_port_scan file to s3...')
-    up_s3_file = 'saip/candidate_vps/{}.csv'.format(date)
-    s3_buket.upload_files(up_s3_file, candidate_vps_file)
-    up_s3_file = 'saip/ip2do_port_scan/{}.csv'.format(date)
-    s3_buket.upload_files(up_s3_file, ip2do_port_scan_file)
+                    if prefix in candidate_prefix: print(line, file = ofile)
+    #upload to s3
+    print('upload candidate_vps file and ip2do_port_scan file to s3...')
+    s3_candidate_vps_file = 'saip/{}/{}candidate_vps.csv'.format(date, experiment_id)
+    s3_buket.upload_files(s3_candidate_vps_file, local_candidate_vps_file)
+    s3_ip2do_port_scan_file = 'saip/{}/{}/ip2do_port_scan.csv'.format(date, experiment_id)
+    s3_buket.upload_files(s3_ip2do_port_scan_file, local_ip2do_port_scan_file)

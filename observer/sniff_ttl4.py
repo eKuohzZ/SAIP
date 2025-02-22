@@ -12,7 +12,6 @@ import  argparse
 import utils.conf as cf
 
 vps = cf.VPsConfig()
-data_path = cf.get_data_path()
 
 def get_mac(target_ip):
     while True:
@@ -44,8 +43,12 @@ def process_ttl():
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
     observer = vps.get_vp_by_id(observer_id)
+    data_path = cf.get_data_path(date, experiment_id)
     # define output file
-    local_ttl_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, date, experiment_id, spoofer_id, observer_id)
+    local_ttl_result_dir = '{}/ttl_result'.format(data_path)
+    if not os.path.exists(local_ttl_result_dir):
+        os.makedirs(local_ttl_result_dir)
+    local_ttl_result_file = '{}/ttl_result/{}-{}.csv'.format(data_path, spoofer_id, observer_id)
     output_file = open(local_ttl_result_file, 'w', newline='')
     writer = csv.writer(output_file)
     # receive data from tcpdump

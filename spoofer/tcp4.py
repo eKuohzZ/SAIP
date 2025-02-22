@@ -56,7 +56,7 @@ def tcp_send(measurement: ms.Measurement, target_file):
                 if elapsed < interval:
                     time.sleep(interval - elapsed)
     print('end sending TCP packets!')
-    time.sleep(30)
+    time.sleep(120)
     #send stop signal to observer
     print('tell observer to stop sniff...')
     signals.observer_stop_sniff(measurement)

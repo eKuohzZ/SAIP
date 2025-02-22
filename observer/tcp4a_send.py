@@ -12,7 +12,6 @@ import argparse
 import utils.conf as cf
 
 vps = cf.VPsConfig()
-data_path = cf.get_data_path()
 
 def get_mac(target_ip):
     while True:
@@ -67,7 +66,8 @@ def do_tcp_measure():
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
     pps = parser.parse_args().pps
-    target_file = '{}/hitlist_tcp-{}-{}.csv'.format(data_path, date, experiment_id)
+    data_path = cf.get_data_path(date, experiment_id)
+    target_file = '{}/hitlist_tcp.csv'.format(data_path)
     send_process = multiprocessing.Process(target=tcp_send, args=(observer_id, target_file, pps))
     send_process.start()
     send_process.join()

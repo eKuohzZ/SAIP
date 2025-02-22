@@ -2,8 +2,8 @@ import argparse
 
 import observer.observer as observer
 import analyzer.analyzer as analyzer
-import utils.conf as cf
 import spoofer.spoofer as spoofer
+import scanner.scanner as scanner
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -17,3 +17,5 @@ if __name__ == '__main__':
         observer.main(port)
     elif role == 'spoofer':
         spoofer.main(port)
+    elif role == 'scanner':
+        scanner.main(port)

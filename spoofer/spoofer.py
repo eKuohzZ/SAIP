@@ -10,7 +10,6 @@ import utils.conf as cf
 import utils.measurement as ms
 
 #sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-data_path = cf.get_data_path()
 vps = cf.VPsConfig()
 
 class Spoofer:
@@ -23,13 +22,14 @@ class Spoofer:
         
     def run_task(self, measurement: ms.Measurement):
         #download hitlist from s3
+        data_path = cf.get_data_path(measurement.date, measurement.experiment_id)
         s3_buket = s3bu.S3Bucket()
         if 'ttl' in measurement.method:
             s3_hitlist_file = 'saip/{}/{}/hitlist_icmp.csv'.format(measurement.date, measurement.experiment_id)
-            local_hitlist_file = '{}/hitlist_icmp-{}-{}.csv'.format(data_path, measurement.date, measurement.experiment_id)
+            local_hitlist_file = '{}/hitlist_icmp.csv'.format(data_path)
         elif 'tcp' in measurement.method:
             s3_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(measurement.date, measurement.experiment_id)
-            local_hitlist_file = '{}/hitlist_tcp-{}-{}.csv'.format(data_path, measurement.date, measurement.experiment_id)
+            local_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)
         if os.path.exists(local_hitlist_file):
             print('hitlist file already exist!')
         else:

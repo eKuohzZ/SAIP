@@ -6,9 +6,8 @@ import subprocess
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 
-data_path = cf.get_data_path()
-
 def build_hitlist(date, experiment_id):
+    data_path = cf.get_data_path(date, experiment_id)
     s3_buket = s3bu.S3Bucket()
     # download active ipv4 data from s3
     if cf.if_download_data():
@@ -17,11 +16,11 @@ def build_hitlist(date, experiment_id):
             if s3_buket.check_file_exist('active_ip/ipv4/{}'.format(dir), 'icmp.txt.xz'):
                 s3_active_ipv4_file = 'active_ip/ipv4/{}/icmp.txt.xz'.format(dir)
                 break
-        local_active_ipv4_file = '{}/active_ipv4-{}-{}.txt.xz'.format(data_path, date, experiment_id)
+        local_active_ipv4_file = '{}/active_ipv4.txt.xz'.format(data_path)
         print('download active ipv4 data [{}] to [{}]...'.format(s3_active_ipv4_file, local_active_ipv4_file))
         s3_buket.download_file(s3_active_ipv4_file, local_active_ipv4_file)
         # unzip active ipv4_data
-        active_ipv4_data_file = '{}/active_ipv4-{}-{}.txt'.format(data_path, date, experiment_id)
+        active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
         print('unzip active ipv4 data to [{}]...'.format(active_ipv4_data_file))
         if os.path.exists(active_ipv4_data_file):
             print('active ipv4 data file already exist!')
@@ -29,7 +28,7 @@ def build_hitlist(date, experiment_id):
             subprocess.run(['xz', '-d', local_active_ipv4_file])
     #build icmp ip/24 hitlist
     prefix2ip = {}
-    local_icmp_hitlist_file = '{}/hitlist_icmp-{}-{}.csv'.format(data_path, date, experiment_id)
+    local_icmp_hitlist_file = '{}/hitlist_icmp.csv'.format(data_path)
     print('build icmp hitlist [{}]...'.format(local_icmp_hitlist_file))
     with open(active_ipv4_data_file) as ifile:
         while True:

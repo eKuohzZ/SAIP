@@ -10,8 +10,8 @@ import utils.S3BucketUtil as s3bu
 import utils.conf as cf    
 import utils.measurement as ms
 import signals
+import scanner.build_tcp_hitlist as bth
 
-data_path = cf.get_data_path()
 vps = cf.VPsConfig()
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,8 +26,9 @@ class Observer:
         self.app.route('/stop_measurement', methods=['POST'])(self.stop_measurement)
 
     def post_measurement(self, measurement: ms.Measurement):
+        data_path = cf.get_data_path(measurement.date, measurement.experiment_id)
         if measurement.method == 'ttl':
-            local_measurement_result_file = '{}/ttl_result-{}-{}-{}-{}.csv'.format(data_path, measurement.date, measurement.experiment_id, measurement.spoofer_id, measurement.observer_id)
+            local_measurement_result_file = '{}/ttl_result/{}-{}.csv'.format(data_path, measurement.spoofer_id, measurement.observer_id)
             s3_measurement_result_file = 'saip/{}/{}/ttl_result/{}-{}.csv.xz'.format(measurement.date, measurement.experiment_id, measurement.spoofer_id, measurement.observer_id)
             #compress file
             compress_file = local_measurement_result_file + '.xz'
@@ -41,6 +42,7 @@ class Observer:
             s3_buket.upload_files(s3_measurement_result_file, compress_file)
 
         if measurement.method == 'tcp':
+            '''
             args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcpa', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
             task_tcpa_sniff = subprocess.Popen(args)
             args = ['python', os.path.join(current_dir, 'tcp4a_send.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps]
@@ -48,6 +50,7 @@ class Observer:
             task_tcpa_send.wait()
             time.sleep(120)
             task_tcpa_sniff.terminate()
+            '''
 
             args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
             task_tcps_sniff = subprocess.Popen(args)
@@ -57,8 +60,8 @@ class Observer:
             time.sleep(120)
             task_tcps_sniff.terminate()
 
-            for flag in ["", 'a', 's']:
-                local_measurement_result_file = '{}/tcp{}_result-{}-{}-{}-{}.csv'.format(data_path, flag, measurement.date, measurement.experiment_id, measurement.spoofer_id, measurement.observer_id)
+            for flag in ["", 's']:
+                local_measurement_result_file = '{}/tcp{}_result/{}-{}.csv'.format(data_path, flag, measurement.spoofer_id, measurement.observer_id)
                 s3_measurement_result_file = 'saip/{}/{}/tcp{}_result/{}-{}.csv.xz'.format(measurement.date, measurement.experiment_id, flag, measurement.spoofer_id, measurement.observer_id)
                 #compress file
                 compress_file = local_measurement_result_file + '.xz'

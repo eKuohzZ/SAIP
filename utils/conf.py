@@ -20,7 +20,7 @@ S3_CONFIG = {
 
 # Vantage points configuration
 class VPInfo:
-    def __init__(self, id, name, role, public_addr, private_addr, network_interface, pps, port):
+    def __init__(self, id: int, name: str, role: str, public_addr: str, private_addr: str, network_interface: str, pps: int, port: str):
         self.id = id
         self.name = name
         self.role = role
@@ -28,7 +28,7 @@ class VPInfo:
         self.private_addr = private_addr
         self.network_interface = network_interface
         self.pps = pps
-        self.port = port
+        self.http_port = port
 
 class VPsConfig:
     def __init__(self):
@@ -41,17 +41,19 @@ class VPsConfig:
             id = 0
             for row in reader:
                 if row['ROLE'] == 'analyzer':
-                    vp = VPInfo(0, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], row['PACKETS_PER_SECOND'], row['HTTP_PORT'])
-                    self.vps = [vp] + self.vps
+                    vp = VPInfo(-1, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
                     self.analyzer = vp
+                elif row['ROLE'] == 'scanner':
+                    vp = VPInfo(-2, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
+                    self.scanner = vp
                 else:
-                    id += 1
-                    vp = VPInfo(id, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], row['PACKETS_PER_SECOND'], row['HTTP_PORT'])
+                    vp = VPInfo(id, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
                     self.vps.append(vp)
                     if vp.role == 'spoofer':
                         self.spoofers.append(vp)
                     elif vp.role == 'observer':
-                        self.observers.append(vp)       
+                        self.observers.append(vp)     
+                    id += 1
     
     @property
     def get_spoofers(self) -> list[VPInfo]:
@@ -64,6 +66,10 @@ class VPsConfig:
     @property
     def get_analyzer(self) -> VPInfo:
         return self.analyzer
+
+    @property
+    def get_scanner(self) -> VPInfo:
+        return self.scanner
     
     @property
     def get_vps(self) -> list[VPInfo]:
@@ -90,12 +96,11 @@ def get_experiment_id():
             f.write('1')
         return 1
     
-def get_data_path():
+def get_data_path(date, experiment_id):
     work_dir = os.getcwd()
-    data_dir = os.path.join(work_dir, 'data')
+    data_dir = os.path.join(work_dir, 'data', date, str(experiment_id))
     abs_path = os.path.abspath(data_dir)
-    if not os.path.exists(abs_path):
-        os.makedirs(abs_path)
+    os.makedirs(abs_path, exist_ok=True)
     return abs_path
 
 def if_download_data():

@@ -12,7 +12,6 @@ import argparse
 import utils.conf as cf
 
 vps = cf.VPsConfig()
-data_path = cf.get_data_path()
 
 def get_mac(target_ip):
     while True:
@@ -62,8 +61,12 @@ def process_tcp():
 
     port_list = cf.get_tcp_port(method)
     observer = vps.get_vp_by_id(observer_id)
+    data_path = cf.get_data_path(date, experiment_id)
     # define output file
-    local_tcp_result_file = '{}/{}_result-{}-{}-{}-{}.csv'.format(data_path, method, date, experiment_id, spoofer_id, observer_id)
+    local_tcp_result_dir = '{}/{}_result'.format(data_path, method)
+    if not os.path.exists(local_tcp_result_dir):
+        os.makedirs(local_tcp_result_dir)
+    local_tcp_result_file = '{}/{}_result/{}-{}.csv'.format(data_path, method, spoofer_id, observer_id)
     output_file = open(local_tcp_result_file, 'w', newline='')
     writer = csv.writer(output_file)
     # receive data from tcpdump

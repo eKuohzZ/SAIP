@@ -12,7 +12,6 @@ class Measurement:
         self.method = method
         self.date = date
         self.pps = int(pps)
-        self.status = "initialized"
 
     @classmethod
     def from_dict(cls, data):
@@ -45,13 +44,4 @@ class Measurement:
             "status": self.status
         }
 
-class Experiment:
-    def __init__(self, id, date):
-        self.id = int(id)
-        self.date = date
-        self.measurements: Dict[int, Measurement] = {}
-        self.lock = threading.Lock()
-    
-    def add_measurement(self, measurement: Measurement):
-        self.measurements[measurement.measurement_id] = measurement
 
