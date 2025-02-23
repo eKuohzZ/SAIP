@@ -28,7 +28,6 @@ class Measurement:
             data["method"],
             data["date"],
             pps,
-            data["status"]
         )
     
     @property
@@ -41,7 +40,6 @@ class Measurement:
             "method": self.method,
             "date": self.date,
             "pps": self.pps,
-            "status": self.status
         }
 
 

@@ -18,7 +18,8 @@ def build_hitlist(date, experiment_id):
                 break
         local_active_ipv4_file = '{}/active_ipv4.txt.xz'.format(data_path)
         print('download active ipv4 data [{}] to [{}]...'.format(s3_active_ipv4_file, local_active_ipv4_file))
-        s3_buket.download_file(s3_active_ipv4_file, local_active_ipv4_file)
+        if not os.path.exists(local_active_ipv4_file):
+            s3_buket.download_file(s3_active_ipv4_file, local_active_ipv4_file)
         # unzip active ipv4_data
         active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
         print('unzip active ipv4 data to [{}]...'.format(active_ipv4_data_file))

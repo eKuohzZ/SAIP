@@ -145,8 +145,6 @@ def get_anycast_vps(date, experiment_id):
     print('upload anycast vps file [{}] to [{}]...'.format(local_anycast_vps_file, s3_anycast_vps_file))
     s3_buket = s3bu.S3Bucket()
     s3_buket.upload_files(s3_anycast_vps_file, local_anycast_vps_file)
-    #remove
-    subprocess.run(['rm', '-r', data_path])
     
 if __name__ == '__main__':
     get_anycast_vps()

@@ -1,4 +1,5 @@
 import threading
+import subprocess
 
 from flask import Flask, g, request
 from dataclasses import dataclass, field
@@ -74,13 +75,19 @@ class Analyzer:
                 return
         if measurement.method == 'ttl':
             get_candidate.get_candidate_vps(measurement.date, measurement.experiment_id)
-            measurement.method = 'scan'
             signals.scanner_start(measurement)
         if measurement.method == 'tcp':
             get_anycast.get_anycast_vps(measurement.date, measurement.experiment_id)
+            for spoofer in self.vps.get_spoofers:
+                signals.spoofer_end(measurement.date, measurement.experiment_id, spoofer.id)
+            for observer in self.vps.get_observers:
+                signals.observer_end(measurement.date, measurement.experiment_id, observer.id)
+            signals.scanner_end(measurement.date, measurement.experiment_id)
+            subprocess.run(['rm', '-r', cf.get_data_path(measurement.date, measurement.experiment_id)])
             self.state.is_running = False
             with self.state.experiments_status_lock:
                 self.state.experiments.pop(measurement.experiment_id, None)
+        
     
     def end_scan_task(self, experiment_id):
         experiment = self.state.experiments[experiment_id]
@@ -106,7 +113,3 @@ class Analyzer:
         
     def run(self, port):
         self.app.run(host='0.0.0.0', port=port)
-
-def main(port):
-    analyzer = Analyzer()
-    analyzer.run(port)

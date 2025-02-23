@@ -11,11 +11,15 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=39999, help='port of the analyzer, observer, or spoofer')
     role = parser.parse_args().role
     port = parser.parse_args().port
-    if role == 'controller':
-        analyzer.main(port)
+    if role == 'analyzer':
+        vp = analyzer.Analyzer()
+        vp.run(port)
     elif role == 'observer':
-        observer.main(port)
+        vp = observer.Observer()
+        vp.run(port)
     elif role == 'spoofer':
-        spoofer.main(port)
+        vp = spoofer.Spoofer()
+        vp.run(port)
     elif role == 'scanner':
-        scanner.main(port)
+        vp = scanner.Scanner()
+        vp.run(port)

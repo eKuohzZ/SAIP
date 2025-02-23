@@ -83,14 +83,16 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
     hitlist = []
     active_prefix = set()
     record_file = '{}/port_scan_record.csv'.format(data_path)
+    recent_rate_changes = []
     for port in ports_by_rank:
         command = 'zmap -s 47000-50000 -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(port, rate, interface, local_ip2scan_file, port_scan_result_file)
         #command = 'zmap -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(port2sacn, rate, interface, down_local_file, port_scan_result_file)
         subprocess.run(command, shell=True)
         new_ip2scan = set()
+        old_hitlist_len = len(hitlist)
         with open(port_scan_result_file) as ifile:
             while True:
-                lines = ifile.readlines(10000000)
+                lines = ifile.readlines(1000000)
                 if not lines: break
                 for line in lines:
                     ll = line.strip().split(',')
@@ -106,7 +108,7 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
 
         with open(local_ip2scan_file) as ifile:
             while True:
-                lines = ifile.readlines(10000000)
+                lines = ifile.readlines(1000000)
                 if not lines: break
                 for line in lines:
                     target = line.strip()
@@ -122,6 +124,17 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
         with open(record_file, 'a') as ofile:
             output = str(len(active_prefix))+','+str(time.time())
             print(output, file = ofile)
+        
+        if len(hitlist) > old_hitlist_len:
+            change_rate = (len(hitlist) - old_hitlist_len) / len(hitlist)
+        else:
+            change_rate = 0
+        recent_rate_changes.append(change_rate)
+        if len(recent_rate_changes) > 10:
+            recent_rate_changes.pop(0)
+        avg_change_rate = sum(recent_rate_changes) / len(recent_rate_changes)
+        if avg_change_rate < 0.01:
+            break
         
     with open(tcp_hitlist_file, 'w') as ofile:
         for elm in hitlist:

@@ -7,4 +7,4 @@ vps = cf.VPsConfig()
 
 def analyzer_measurment_end(measurement: ms.Measurement):
     vp = vps.get_analyzer
-    response = requests.post('http://{}:{}/end_measurement'.format(vp.public_addr, vp.port), json=measurement.dict)
+    response = requests.post('http://{}:{}/end_measurement'.format(vp.public_addr, vp.http_port), json=measurement.dict)

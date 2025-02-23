@@ -22,7 +22,12 @@ def ttl_sniff():
     print('start sniffing ICMP packets...')
     observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn src not {} and icmp[icmptype] == 0 and icmp[icmpcode] == 0 -w -".format(observer.network_interface, observer.private_addr)
+    command_tcpdump = "tcpdump -i {} -nn src not {} and (dst {} or dst {}) and icmp[icmptype] == 0 and icmp[icmpcode] == 0 -w -".format(
+    observer.network_interface, 
+    observer.private_addr, 
+    observer.public_addr, 
+    observer.private_addr
+    )
     #icmp packet process script
     command_process_script = "python3 {} --date {} --mID {} --spoofer {} --observer {}".format(os.path.join(current_dir, 'sniff_ttl4.py'), date, experiment_id, spoofer_id, observer_id)
     #tcpdump sniffing and send to process script

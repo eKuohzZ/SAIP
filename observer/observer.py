@@ -12,18 +12,22 @@ import utils.measurement as ms
 import signals
 import scanner.build_tcp_hitlist as bth
 
-vps = cf.VPsConfig()
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
 class Observer:
     def __init__(self):
         self.app = Flask(__name__)
         self.setup_routes()
         self.measurement_process = None
+        self.vps = cf.VPsConfig()
+        self.current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        ban_script = os.path.join(self.current_dir, 'ban.sh')
+        subprocess.run(['chmod', '+x', ban_script])
+        subprocess.run([ban_script])
 
     def setup_routes(self):
         self.app.route('/start_measurement', methods=['POST'])(self.start_measurement)
         self.app.route('/stop_measurement', methods=['POST'])(self.stop_measurement)
+        self.app.route('/end_experiment', methods=['POST'])(self.end_experiment)
 
     def post_measurement(self, measurement: ms.Measurement):
         data_path = cf.get_data_path(measurement.date, measurement.experiment_id)
@@ -52,9 +56,15 @@ class Observer:
             task_tcpa_sniff.terminate()
             '''
 
-            args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+            s3_buket = s3bu.S3Bucket()
+            s3_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(measurement.date, measurement.experiment_id)
+            local_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)
+            if not os.path.exists(local_hitlist_file):
+                s3_buket.download_file(s3_hitlist_file, local_hitlist_file)
+
+            args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
             task_tcps_sniff = subprocess.Popen(args)
-            args = ['python', os.path.join(current_dir, 'tcp4s_send.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps//2]
+            args = ['python', os.path.join(self.current_dir, 'tcp4s_send.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps//2]
             task_tcps_send = subprocess.Popen(args)
             task_tcps_send.wait()
             time.sleep(120)
@@ -82,13 +92,13 @@ class Observer:
             if measurement is None:
                 return 'No data provided in request', 400
             if measurement.method == 'ttl':
-                args = ['python', os.path.join(current_dir, 'ttl4.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+                args = ['python', os.path.join(self.current_dir, 'ttl4.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
             elif measurement.method == 'tcp':
-                args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcp', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+                args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcp', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
             self.measurement_process = subprocess.Popen(args)
             return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
             .format(measurement.date, measurement.experiment_id, measurement.method,\
-                    vps.get_vp_by_id(measurement.spoofer_id).name, vps.get_vp_by_id(measurement.observer_id).name)
+                    self.vps.get_vp_by_id(measurement.spoofer_id).name, self.vps.get_vp_by_id(measurement.observer_id).name)
         else:
             return 'Task is already running!'
         
@@ -102,17 +112,17 @@ class Observer:
         else:
             return 'No task is running'
         
+    def end_experiment(self):
+        date = request.get_json()['date']
+        experiment_id = request.get_json()['experiment_id']
+        data_path = cf.get_data_path(date, experiment_id)
+        if os.path.exists(data_path):
+            subprocess.run(['rm', '-r', data_path])
+        return 'Experiment ended successfully'
+
+        
     def run(self, port):
         self.app.run(host='0.0.0.0', port=port)
        
-def main(port):
-    # ban the output TCP traffic on the selective ports
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    ban_script = os.path.join(current_dir, 'ban.sh')
-    subprocess.run(['chmod', '+x', ban_script])
-    subprocess.run([ban_script])
-    # run the app
-    observer = Observer()
-    observer.run(port)
 
 
