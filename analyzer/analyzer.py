@@ -20,36 +20,40 @@ class ExperimentsState:
     latest_experiment_id: int = 0
     experiments: Dict[int, ex.Experiment] = field(default_factory=dict)
     experiments_status_lock: threading.Lock = field(default_factory=threading.Lock)
-    vps_status: Dict[int, int] = field(default_factory=dict)
+    vps_status: Dict[str, Dict[int, int]] = field(default_factory=dict)
 
 class Analyzer:
     def __init__(self):
         self.state = ExperimentsState()
-        self.app = Flask(__name__)
-        self.setup_routes()
+        #self.app = Flask(__name__)
+        #self.setup_routes()
         self.vps = cf.VPsConfig()
 
-        for vp in self.vps.get_vps:
-            self.state.vps_status[vp.id] = vp.pps
+        self.vps_status = {'spoofer': {}, 'observer': {}}
+        for spoofer in self.vps.get_spoofers:
+            self.vps_status['spoofer'][spoofer.id] = spoofer.spoofer_pps
+            self.vps_status['observer'][spoofer.id] = spoofer.observer_pps
+        for non_spoofer in self.vps.get_non_spoofers:
+            self.vps_status['observer'][non_spoofer.id] = non_spoofer.observer_pps
         
-    def setup_routes(self):
-        self.app.route('/start_experiment', methods=['POST'])(self.start_experiment)
-        self.app.route('/end_measurement', methods=['POST'])(self.end_measurement)
-        self.app.route('/end_scan', methods=['POST'])(self.end_scan)
+    #def setup_routes(self):
+        #self.app.route('/start_experiment', methods=['POST'])(self.start_experiment)
+        #self.app.route('/end_measurement', methods=['POST'])(self.end_measurement)
+        #self.app.route('/end_scan', methods=['POST'])(self.end_scan)
 
     def start_measurement(self, experiment_id):
         experiment = self.state.experiments[experiment_id]
         with experiment.lock:
             for observer_id, measurements in experiment.measurements.items():
-                if self.state.vps_status[observer_id] == 0:
+                if self.state.vps_status['observer'][observer_id] == 0:
                     continue
                 for k in range(1, len(measurements)+1):
                     measurement = experiment.find_kth_max_pps_measurement(observer_id, k)
                     with self.state.experiments_status_lock:
-                        if self.state.vps_status[measurement.spoofer_id] < measurement.pps:
+                        if self.state.vps_status['spoofer'][measurement.spoofer_id] < measurement.pps:
                             continue
-                        self.state.vps_status[measurement.spoofer_id] -= measurement.pps
-                        self.state.vps_status[observer_id] = 0
+                        self.state.vps_status['spoofer'][measurement.spoofer_id] -= measurement.pps
+                        self.state.vps_status['observer'][observer_id] = 0
                     signals.spoofer_start(measurement)
                     break
             
@@ -65,8 +69,8 @@ class Analyzer:
 
     def end_measurement_task(self, measurement: ms.Measurement):
         with self.state.experiments_status_lock:
-            self.state.vps_status[measurement.spoofer_id] += measurement.pps
-            self.state.vps_status[measurement.observer_id] = self.vps.get_vp_by_id(measurement.observer_id).pps
+            self.state.vps_status['spoofer'][measurement.spoofer_id] += measurement.pps
+            self.state.vps_status['observer'][measurement.observer_id] = self.vps.get_vp_by_id(measurement.observer_id).observer_pps
         experiment = self.state.experiments[measurement.experiment_id]
         with experiment.lock:
             is_finished = experiment.remove_measurement(measurement.observer_id, measurement.measurement_id)
@@ -80,8 +84,8 @@ class Analyzer:
             get_anycast.get_anycast_vps(measurement.date, measurement.experiment_id)
             for spoofer in self.vps.get_spoofers:
                 signals.spoofer_end(measurement.date, measurement.experiment_id, spoofer.id)
-            for observer in self.vps.get_observers:
-                signals.observer_end(measurement.date, measurement.experiment_id, observer.id)
+            for non_spoofer in self.vps.get_non_spoofers:
+                signals.observer_end(measurement.date, measurement.experiment_id, non_spoofer.id)
             signals.scanner_end(measurement.date, measurement.experiment_id)
             subprocess.run(['rm', '-r', cf.get_data_path(measurement.date, measurement.experiment_id)])
             self.state.is_running = False
@@ -112,4 +116,4 @@ class Analyzer:
         return 'Scan ended successfully'
         
     def run(self, port):
-        self.app.run(host='0.0.0.0', port=port)
+        

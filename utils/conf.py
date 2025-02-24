@@ -20,20 +20,22 @@ S3_CONFIG = {
 
 # Vantage points configuration
 class VPInfo:
-    def __init__(self, id: int, name: str, role: str, public_addr: str, private_addr: str, network_interface: str, pps: int, port: str):
+    def __init__(self, id: int, name: str, role: str, public_addr: str, private_addr: str, network_interface: str, spoofer_pps: int, observer_pps: int, spoofer_port: str, observer_port: str):
         self.id = id
         self.name = name
         self.role = role
         self.public_addr = public_addr
         self.private_addr = private_addr
         self.network_interface = network_interface
-        self.pps = pps
-        self.http_port = port
+        self.spoofer_pps = spoofer_pps 
+        self.observer_pps = observer_pps
+        self.spoofer_port = spoofer_port
+        self.observer_port = observer_port
 
 class VPsConfig:
     def __init__(self):
         self.spoofers = []
-        self.observers = []
+        self.non_spoofers = []
         self.vps = []
 
         with open("config/vps.csv", 'r', encoding='utf-8') as f:
@@ -41,18 +43,18 @@ class VPsConfig:
             id = 0
             for row in reader:
                 if row['ROLE'] == 'analyzer':
-                    vp = VPInfo(-1, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
+                    vp = VPInfo(-1, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OVSERVER_PORT'])
                     self.analyzer = vp
                 elif row['ROLE'] == 'scanner':
-                    vp = VPInfo(-2, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
+                    vp = VPInfo(-2, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
                     self.scanner = vp
                 else:
-                    vp = VPInfo(id, row['NAME'], row['ROLE'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['PACKETS_PER_SECOND']), row['HTTP_PORT'])
+                    vp = VPInfo(id, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
                     self.vps.append(vp)
                     if vp.role == 'spoofer':
                         self.spoofers.append(vp)
-                    elif vp.role == 'observer':
-                        self.observers.append(vp)     
+                    elif vp.role == 'non_spoofer':
+                        self.non_spoofers.append(vp)     
                     id += 1
     
     @property
@@ -60,8 +62,8 @@ class VPsConfig:
         return self.spoofers
     
     @property
-    def get_observers(self) -> list[VPInfo]:
-        return self.observers
+    def get_non_spoofers(self) -> list[VPInfo]:
+        return self.non_spoofers
     
     @property
     def get_analyzer(self) -> VPInfo:
@@ -113,17 +115,17 @@ def get_tcp_port(method):
             ports = [int(port.strip()) for port in f.readlines()]
         random.shuffle(ports)
 
-        group_size = len(ports) // 3
+        group_size = len(ports) // 2
         tcp_ports = ports[:group_size]
-        tcps_ports = ports[group_size:2*group_size]
-        tcpa_ports = ports[2*group_size:]
+        tcps_ports = ports[group_size:]
+        #tcpa_ports = ports[2*group_size:]
         
         if method == 'tcp':
             return tcp_ports
         elif method == 'tcps':
             return tcps_ports
-        elif method == 'tcpa':
-            return tcpa_ports
+        #elif method == 'tcpa':
+            #return tcpa_ports
         else:
             return []
     except FileNotFoundError:
@@ -138,8 +140,8 @@ def get_number_of_ports(method):
         return 10
     elif method == 'tcps':
         return 10
-    elif method == 'tcpa':
-        return 10
+    #elif method == 'tcpa':
+        #return 10
 
 def get_date():
     now = datetime.datetime.now()

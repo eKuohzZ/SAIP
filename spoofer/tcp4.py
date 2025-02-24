@@ -26,11 +26,11 @@ skt2 = conf.L2socket()
 skt3 = conf.L3socket()
 gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
-etherPkt = raw(Ether(dst=macaddr, type=0x0800))
+ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
 
 def tcp_send(measurement: ms.Measurement, target_file):
     observer = vps.get_vp_by_id(measurement.observer_id)
-    interval = 1/measurement.pps
+    interval = 1 / measurement.pps
     #send start signal to observer
     print('tell observer to start sniff...')
     signals.observer_start_sniff(measurement)
@@ -48,7 +48,7 @@ def tcp_send(measurement: ms.Measurement, target_file):
             for sport in port_list:
                 start_time = time.time()
                 iptcp_pkt = raw(IP(src=observer.public_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))
-                packet = etherPkt + iptcp_pkt
+                packet = ether_pkt + iptcp_pkt
                 skt2.send(packet)
                 end_time = time.time()
                 elapsed = end_time - start_time

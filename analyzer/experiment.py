@@ -18,13 +18,13 @@ class Experiment:
             measurement_id = 0
             #spoofer to observer
             for spoofer in vps.get_spoofers:
-                for observer in vps.get_observers:
-                    pps = min(spoofer.pps, observer.pps)
-                    measurement = ms.Measurement(self.id, measurement_id, spoofer.id, observer.id, method, self.date, pps)
+                for non_spoofer in vps.get_non_spoofers:
+                    pps = min(spoofer.spoofer_pps, non_spoofer.observer_pps)
+                    measurement = ms.Measurement(self.id, measurement_id, spoofer.id, non_spoofer.id, method, self.date, pps)
                     measurement_id += 1
-                    if observer.id not in self.measurements:
-                        self.measurements[observer.id] = {}
-                    self.measurements[observer.id][measurement_id] = measurement
+                    if non_spoofer.id not in self.measurements:
+                        self.measurements[non_spoofer.id] = {}
+                    self.measurements[non_spoofer.id][measurement_id] = measurement
             #spoofer to spoofer
             ids = []
             for spoofer in vps.get_spoofers:
@@ -45,7 +45,7 @@ class Experiment:
                         in_degrees[target_id] += 1
             for spoofer_id, observer_ids in graph.items():
                 for observer_id in observer_ids:
-                    pps = min(vps.get_vp_by_id(spoofer_id).pps, vps.get_vp_by_id(observer_id).pps)
+                    pps = min(vps.get_vp_by_id(spoofer_id).spoofer_pps, vps.get_vp_by_id(observer_id).observer_pps)
                     measurement = ms.Measurement(self.id, measurement_id, spoofer_id, observer_id, method, self.date, pps)
                     measurement_id += 1
                     if observer_id not in self.measurements:

@@ -27,11 +27,11 @@ skt3 = conf.L3socket()
 gateway = ni.gateways()['default'][ni.AF_INET][0]
 macaddr = get_mac(gateway)
 
-etherPkt = raw(Ether(dst=macaddr, type=0x0800))
+ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
 
 def tcp_send(observer_id, target_file, pps):
     observer = vps.get_vp_by_id(observer_id)
-    interval = 1/pps
+    interval = 1 / pps
     print('start sending TCPs packets...')
     with open(target_file) as ifile:
         lines = ifile.readlines()
@@ -45,7 +45,7 @@ def tcp_send(observer_id, target_file, pps):
             for sport in port_list:
                 start_time = time.time()
                 iptcpPkt = raw(IP(src=observer.private_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))
-                packet = etherPkt + iptcpPkt
+                packet = ether_pkt + iptcpPkt
                 skt2.send(packet)
                 end_time = time.time()
                 elapsed = end_time - start_time

@@ -7,4 +7,4 @@ vps = cf.VPsConfig()
 
 def analyzer_scan_end(measurement: ms.Measurement):
     vp = vps.get_analyzer
-    response = requests.post('http://{}:{}/end_scan'.format(vp.public_addr, vp.http_port), json=measurement.dict)
+    response = requests.post('http://{}:{}/end_scan'.format(vp.public_addr, vp.spoofer_port), json=measurement.dict)
