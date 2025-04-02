@@ -27,6 +27,8 @@ def build_hitlist(date, experiment_id):
             print('active ipv4 data file already exist!')
         else:
             subprocess.run(['xz', '-d', local_active_ipv4_file])
+    else:
+        active_ipv4_data_file = './config/target.csv'
     #build icmp ip/24 hitlist
     prefix2ip = {}
     local_icmp_hitlist_file = '{}/hitlist_icmp.csv'.format(data_path)

@@ -31,3 +31,13 @@ def spoofer_end(date: str, experiment_id: int, spoofer_id: int):
     vp = vps.get_vp_by_id(spoofer_id)
     date = {'date': date, 'experiment_id': experiment_id}
     response = requests.post('http://{}:{}/end_experiment'.format(vp.public_addr, vp.spoofer_port), json=date)
+
+def observer_get_status(observer_id: int):
+    vp = vps.get_vp_by_id(observer_id)
+    response = requests.get('http://{}:{}/get_status'.format(vp.public_addr, vp.observer_port))
+    return response.json()
+
+def scanner_get_status():
+    vp = vps.get_scanner
+    response = requests.get('http://{}:{}/get_status'.format(vp.public_addr, vp.spoofer_port))
+    return response.json()

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
+import psutil
 import threading
 import time
+import signal
 
 from flask import Flask, request, jsonify
 import subprocess
@@ -9,16 +11,16 @@ import subprocess
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf    
 import utils.measurement as ms
-import signals
+import observer.signals as signals
 import scanner.build_tcp_hitlist as bth
 
 class Observer:
     def __init__(self):
         self.app = Flask(__name__)
         self.setup_routes()
-        self.measurement_process = None
         self.measurement = None
         self.status = "initialized"
+        self.measurement_process = None
         self.vps = cf.VPsConfig()
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         self.lock = threading.Lock()
@@ -66,13 +68,23 @@ class Observer:
             if not os.path.exists(local_hitlist_file):
                 s3_buket.download_file(s3_hitlist_file, local_hitlist_file)
 
-            args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+            args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcps', '--mID', str(measurement.experiment_id), '--spoofer', str(measurement.spoofer_id), '--observer', str(measurement.observer_id)]
             task_tcps_sniff = subprocess.Popen(args)
-            args = ['python', os.path.join(self.current_dir, 'tcp4s_send.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps//2]
+            args = ['python', os.path.join(self.current_dir, 'tcp4s_send.py'), '--date', measurement.date, '--mID', str(measurement.experiment_id), '--spoofer', str(measurement.spoofer_id), '--observer', str(measurement.observer_id), '--pps', str(measurement.pps//2)]
+            time.sleep(10)
             task_tcps_send = subprocess.Popen(args)
             task_tcps_send.wait()
             time.sleep(120)
-            task_tcps_sniff.terminate()
+            proc = psutil.Process(task_tcps_sniff.pid)
+            for child in proc.children(recursive=True):
+                child.terminate()
+            proc.terminate()
+            while True:
+                if task_tcps_sniff and task_tcps_sniff.poll() is None:
+                    time.sleep(1)
+                else:
+                    break
+            #task_tcps_sniff.terminate()
 
             for flag in ["", 's']:
                 local_measurement_result_file = '{}/tcp{}_result/{}-{}.csv'.format(data_path, flag, measurement.spoofer_id, measurement.observer_id)
@@ -100,9 +112,9 @@ class Observer:
                 self.status = 'running'
                 self.measurement = measurement
             if measurement.method == 'ttl':
-                args = ['python', os.path.join(self.current_dir, 'ttl4.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+                args = ['python', os.path.join(self.current_dir, 'ttl4.py'), '--date', measurement.date, '--mID', str(measurement.experiment_id), '--spoofer', str(measurement.spoofer_id), '--observer', str(measurement.observer_id)]
             elif measurement.method == 'tcp':
-                args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcp', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
+                args = ['python', os.path.join(self.current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcp', '--mID', str(measurement.experiment_id), '--spoofer', str(measurement.spoofer_id), '--observer', str(measurement.observer_id)]
             self.measurement_process = subprocess.Popen(args)
             return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
             .format(measurement.date, measurement.experiment_id, measurement.method,\
@@ -113,9 +125,19 @@ class Observer:
     def stop_measurement(self):
         if self.measurement_process and self.measurement_process.poll() is None:
             measurement = ms.Measurement.from_dict(request.get_json())
-            self.measurement_process.terminate()
+            #self.measurement_process.kill()
+            #os.kill(self.measurement_process.pid, signal.SIGKILL)
+            proc = psutil.Process(self.measurement_process.pid)
+            for child in proc.children(recursive=True):
+                child.terminate()
+            proc.terminate()
+            while True:
+                if self.measurement_process and self.measurement_process.poll() is None:
+                    time.sleep(1)
+                else:
+                    break
             self.measurement_process = None
-            threading.Thread(target=self.post_measurement, args=(measurement)).start()
+            threading.Thread(target=self.post_measurement, args=(measurement,)).start()
             return 'Task stopped successfully'
         else:
             return 'No task is running'
@@ -127,8 +149,8 @@ class Observer:
         with self.lock:
             self.status = 'initialized'
             self.measurement = None
-        if os.path.exists(data_path):
-            subprocess.run(['rm', '-r', data_path])
+        #if os.path.exists(data_path):
+            #subprocess.run(['rm', '-r', data_path])
         return 'Experiment ended successfully'
 
     def get_status(self):

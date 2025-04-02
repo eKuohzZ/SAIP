@@ -4,10 +4,12 @@ from scapy.layers.dns import DNSRR, DNSQR
 import subprocess
 import argparse
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import utils.conf as cf
 
 vps = cf.VPsConfig()
-current_dir = os.path.dirname(os.path.abspath(__file__))
 
 def tcp_sniff():
     parser = argparse.ArgumentParser()
@@ -24,12 +26,12 @@ def tcp_sniff():
     print('start sniffing TCP packets...')
     observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn src not {} and (dst {} or dst {}) and tcp -w -".format(
+    command_tcpdump = "tcpdump -i {} -nn 'src not {} and (dst {} or dst {}) and tcp' -w - -U".format(
     observer.network_interface, 
     observer.private_addr, 
     observer.public_addr, 
     observer.private_addr
-    )
+)
     #tcp packet process script
     command_process = "python3 {} --date {} --method {} --mID {} --spoofer {} --observer {}".format(os.path.join(current_dir, 'sniff_tcp4.py'), date, method, experiment_id, spoofer_id, observer_id)
     #tcpdump sniffing and send to process script

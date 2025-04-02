@@ -5,7 +5,8 @@ import subprocess
 
 from flask import Flask, request
 
-import tcp4, ttl4
+import spoofer.tcp4 as tcp4
+import spoofer.ttl4 as ttl4
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 import utils.measurement as ms
@@ -47,7 +48,7 @@ class Spoofer:
 
     def start_measurement(self):
         measurement = ms.Measurement.from_dict(request.get_json())
-        threading.Thread(target=self.run_task, args=(measurement)).start()
+        threading.Thread(target=self.run_task, args=(measurement,)).start()
         return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
             .format(measurement.date, measurement.experiment_id, measurement.method,\
                     self.vps.get_vp_by_id(measurement.spoofer_id).name, self.vps.get_vp_by_id(measurement.observer_id).name)

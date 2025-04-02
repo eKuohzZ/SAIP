@@ -8,12 +8,12 @@ import random
 import datetime
 
 # Input data path
-if_download_data = True
+if_download_data_ans = False
 
 # S3 configuration
 S3_CONFIG = {
-            "ACCESS_KEY": "siKlxRVrztiXqVgJ",
-            "SECRET_KEY": "5rGL7ds3xclIHaSnfoUiT1RU4V9fom4L",
+            "ACCESS_KEY": "Xu8R1VjptPxb0tQb",
+            "SECRET_KEY": "36V4ojbvCUhCdyPzlqswarF0YUrqFSNN",
             "BUCKET_NAME": "kdp",
             "ENDPOINT_URL": "http://166.111.121.63:59000/",
         }
@@ -42,10 +42,10 @@ class VPsConfig:
             reader = csv.DictReader(f)
             id = 0
             for row in reader:
-                if row['ROLE'] == 'analyzer':
-                    vp = VPInfo(-1, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OVSERVER_PORT'])
+                if row['PROPERTY'] == 'analyzer':
+                    vp = VPInfo(-1, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
                     self.analyzer = vp
-                elif row['ROLE'] == 'scanner':
+                elif row['PROPERTY'] == 'scanner':
                     vp = VPInfo(-2, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
                     self.scanner = vp
                 else:
@@ -106,14 +106,13 @@ def get_data_path(date, experiment_id):
     return abs_path
 
 def if_download_data():
-    return if_download_data
+    return if_download_data_ans
 
 def get_tcp_port(method):
     port_file = "config/port_list.csv"
     try:
         with open(port_file, 'r') as f:
             ports = [int(port.strip()) for port in f.readlines()]
-        random.shuffle(ports)
 
         group_size = len(ports) // 2
         tcp_ports = ports[:group_size]
@@ -121,8 +120,10 @@ def get_tcp_port(method):
         #tcpa_ports = ports[2*group_size:]
         
         if method == 'tcp':
+            #print(tcp_ports)
             return tcp_ports
         elif method == 'tcps':
+            #print(tcps_ports)
             return tcps_ports
         #elif method == 'tcpa':
             #return tcpa_ports

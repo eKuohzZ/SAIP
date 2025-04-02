@@ -13,7 +13,7 @@ if __name__ == '__main__':
     port = parser.parse_args().port
     if role == 'analyzer':
         vp = analyzer.Analyzer()
-        vp.run(port)
+        vp.run()
     elif role == 'observer':
         vp = observer.Observer()
         vp.run(port)

@@ -17,7 +17,7 @@ def select_random_percentage(array, percentage):
     return selected_elements
 
 def get_common_port(date, experiment_id, rate, interface):
-    data_path = cf.get_data_path(date)
+    data_path = cf.get_data_path(date, experiment_id)
     #download candidate file
     s3_buket = s3bu.S3Bucket()
     s3_candidate_file = 'saip/{}/{}/candidate_vps.csv'.format(date, experiment_id)
@@ -142,7 +142,7 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
             print(output, file = ofile)
     
     #上传s3
-    s3_tcp_hitlist_file = 'saip/{}/{}/hitlists_tcp.csv'.format(date, experiment_id)
+    s3_tcp_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(date, experiment_id)
     print('upload tcp_hitlist file [{}] to [{}]...'.format(tcp_hitlist_file, s3_tcp_hitlist_file))
     s3_buket.upload_files(s3_tcp_hitlist_file, tcp_hitlist_file)
 

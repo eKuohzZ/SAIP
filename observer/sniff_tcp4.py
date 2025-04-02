@@ -2,12 +2,16 @@
 import sys
 import csv
 import socket
+import signal
 
+from functools import partial
 from scapy.all import *
 from scapy.layers.dns import DNSRR, DNSQR
 import netifaces as ni
 import dpkt
 import argparse
+
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import utils.conf as cf
 
@@ -22,12 +26,12 @@ def get_mac(target_ip):
         if result:
             return result[0][1].hwsrc
 
-skt2 = conf.L2socket()
+#skt2 = conf.L2socket()
 skt3 = conf.L3socket()
-gateway = ni.gateways()['default'][ni.AF_INET][0]
-macaddr = get_mac(gateway)
+#gateway = ni.gateways()['default'][ni.AF_INET][0]
+#macaddr = get_mac(gateway)
 
-etherPkt = raw(Ether(dst=macaddr, type=0x0800))
+#etherPkt = raw(Ether(dst=macaddr, type=0x0800))
 
 def tcp_flags_str(flags):
     # define a list of tuples, each containing a flag name and its corresponding bitmask
@@ -46,6 +50,13 @@ def tcp_flags_str(flags):
     # return a string containing all the flags that are set
     return ''.join(active_flags)
 
+def handle_termination_signal(output_file, signum, frame):
+    print("Process is terminating. Flushing data...")
+    if not output_file.closed:
+        output_file.flush()
+        output_file.close()
+    sys.exit(0)
+
 def process_tcp():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', type=str, help='YYMMDD')
@@ -58,7 +69,6 @@ def process_tcp():
     experiment_id = parser.parse_args().mID
     spoofer_id = parser.parse_args().spoofer
     observer_id = parser.parse_args().observer
-
     port_list = cf.get_tcp_port(method)
     observer = vps.get_vp_by_id(observer_id)
     data_path = cf.get_data_path(date, experiment_id)
@@ -69,6 +79,9 @@ def process_tcp():
     local_tcp_result_file = '{}/{}_result/{}-{}.csv'.format(data_path, method, spoofer_id, observer_id)
     output_file = open(local_tcp_result_file, 'w', newline='')
     writer = csv.writer(output_file)
+    handler_with_file = partial(handle_termination_signal, output_file)
+    signal.signal(signal.SIGTERM, handler_with_file)
+    signal.signal(signal.SIGINT,  handler_with_file)
     # receive data from tcpdump
     pcap = dpkt.pcap.Reader(sys.stdin.buffer)
     for timestamp, buf in pcap:
@@ -84,15 +97,17 @@ def process_tcp():
             tcp_ack = tcp.ack
             tcp_seq = tcp.seq
             tcp_flags = tcp_flags_str(tcp.flags)
+            #print('Recieved TCP packet with flags: {}, seq: {}, ack: {}, src: {}, sport: {}, dport: {}, ttl: {}, timestamp: {}'.format(tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp))
             if tcp_dport in port_list:
                 # send ACK (second handshake)
+                # print('Recieved TCP packet with flags: {}, seq: {}, ack: {}, src: {}, sport: {}, dport: {}, ttl: {}, timestamp: {}'.format(tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp))
                 if tcp_flags == 'SA' and tcp_ack == 1001:
                     data = (
                         b"Hello"
                     )
-                    iptcpPkt = raw(IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data))
-                    packet = etherPkt + iptcpPkt    
-                    skt2.send(packet)
+                    iptcpPkt = IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data)
+                    packet = iptcpPkt    
+                    skt3.send(packet)
                 writer.writerow([tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp])
         except:
             pass

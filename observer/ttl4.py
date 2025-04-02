@@ -4,10 +4,12 @@ import subprocess
 from scapy.all import *
 from scapy.layers.dns import DNSRR, DNSQR
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import utils.conf as cf
 
 vps = cf.VPsConfig()
-current_dir = os.path.dirname(os.path.abspath(__file__))
 
 def ttl_sniff():
     parser = argparse.ArgumentParser()
@@ -22,12 +24,10 @@ def ttl_sniff():
     print('start sniffing ICMP packets...')
     observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn src not {} and (dst {} or dst {}) and icmp[icmptype] == 0 and icmp[icmpcode] == 0 -w -".format(
+    command_tcpdump = "tcpdump -i {} -nn src not {} and icmp and icmp[0] == 0 -w - -U".format(
     observer.network_interface, 
-    observer.private_addr, 
-    observer.public_addr, 
     observer.private_addr
-    )
+)
     #icmp packet process script
     command_process_script = "python3 {} --date {} --mID {} --spoofer {} --observer {}".format(os.path.join(current_dir, 'sniff_ttl4.py'), date, experiment_id, spoofer_id, observer_id)
     #tcpdump sniffing and send to process script

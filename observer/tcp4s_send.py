@@ -9,6 +9,9 @@ import multiprocessing
 import random
 import argparse
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import utils.conf as cf
 
 vps = cf.VPsConfig()
@@ -22,12 +25,12 @@ def get_mac(target_ip):
         if result:
             return result[0][1].hwsrc
         
-skt2 = conf.L2socket()
+#skt2 = conf.L2socket()
 skt3 = conf.L3socket()
-gateway = ni.gateways()['default'][ni.AF_INET][0]
-macaddr = get_mac(gateway)
+#gateway = ni.gateways()['default'][ni.AF_INET][0]
+#macaddr = get_mac(gateway)
 
-ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
+#ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
 
 def tcp_send(observer_id, target_file, pps):
     observer = vps.get_vp_by_id(observer_id)
@@ -40,13 +43,13 @@ def tcp_send(observer_id, target_file, pps):
             line = line.strip()
             target = line.split(',')[0]
             dport = int(line.split(',')[1])
-            sample_len = min(cf.get_number_of_ports('tcps'), cf.get_number_of_ports('tcps'))
+            sample_len = min(cf.get_number_of_ports('tcps'), len(cf.get_tcp_port('tcps')))
             port_list = random.sample(cf.get_tcp_port('tcps'), sample_len)
             for sport in port_list:
                 start_time = time.time()
-                iptcpPkt = raw(IP(src=observer.private_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000))
-                packet = ether_pkt + iptcpPkt
-                skt2.send(packet)
+                iptcpPkt = IP(src=observer.private_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000)
+                packet = iptcpPkt
+                skt3.send(packet)
                 end_time = time.time()
                 elapsed = end_time - start_time
                 if elapsed < interval:
@@ -70,3 +73,6 @@ def do_tcp_measure():
     send_process = multiprocessing.Process(target=tcp_send, args=(observer_id, target_file, pps))
     send_process.start()
     send_process.join()
+
+if __name__ == '__main__':
+    do_tcp_measure()

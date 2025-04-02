@@ -88,8 +88,9 @@ class S3Bucket(object):
                                           MultipartUpload=part_info)
             print('%s uploaded success!' % (path_local))
             return True
-        except:
+        except Exception as exc:
             print('%s uploaded failed!' % (path_local))
+            print("error occurred.", exc)
             return False
 
     def download_file(self, object_name, path_local):

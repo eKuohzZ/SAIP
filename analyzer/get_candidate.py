@@ -37,7 +37,7 @@ def get_candidate_vp(input_file_dir, input_file_name, date, experiment_id, hitli
     candidate_dir = '{}/candidate_vp'.format(data_path)
     if not os.path.exists(candidate_dir):
         os.makedirs(candidate_dir)
-    candidate_file = '{}/candidate_vp/{}'.format(candidate_dir, input_file_name)
+    candidate_file = '{}/{}'.format(candidate_dir, input_file_name)
     with open(candidate_file, 'w') as ofile: 
         for target in hitlist:
             if target in target2ttl and target2ttl[target]['sent_by_spoofer'] == target2ttl[target]['sent_by_observer']: continue
@@ -101,7 +101,10 @@ def get_candidate_vps(date, experiment_id):
         ll = candidate.split('.')
         prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
         candidate_prefix.add(prefix)
-    active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
+    if cf.if_download_data():
+        active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
+    else:
+        active_ipv4_data_file = './config/target.csv'
     local_ip2do_port_scan_file = '{}/ip2do_port_scan.csv'.format(data_path)
     with open(local_ip2do_port_scan_file, 'w') as ofile:
         with open(active_ipv4_data_file) as ifile:
@@ -115,7 +118,7 @@ def get_candidate_vps(date, experiment_id):
                     if prefix in candidate_prefix: print(line, file = ofile)
     #upload to s3
     print('upload candidate_vps file and ip2do_port_scan file to s3...')
-    s3_candidate_vps_file = 'saip/{}/{}candidate_vps.csv'.format(date, experiment_id)
+    s3_candidate_vps_file = 'saip/{}/{}/candidate_vps.csv'.format(date, experiment_id)
     s3_buket.upload_files(s3_candidate_vps_file, local_candidate_vps_file)
     s3_ip2do_port_scan_file = 'saip/{}/{}/ip2do_port_scan.csv'.format(date, experiment_id)
     s3_buket.upload_files(s3_ip2do_port_scan_file, local_ip2do_port_scan_file)

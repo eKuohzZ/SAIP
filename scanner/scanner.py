@@ -8,7 +8,7 @@ import scanner.build_tcp_hitlist as bth
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 import utils.measurement as ms
-import signals
+import scanner.signals as signals
 
 
 class Scanner:
@@ -37,7 +37,7 @@ class Scanner:
         with self.lock:
             self.status = 'running'
             self.measurement = measurement
-        threading.Thread(target=self.run_scan_task, args=(measurement)).start()
+        threading.Thread(target=self.run_scan_task, args=(measurement,)).start()
         return 'Task started successfully: date={}, id={}, method={}, spoofer={}, observer={}'\
             .format(measurement.date, measurement.experiment_id, measurement.method,\
                     self.vps.get_vp_by_id(measurement.spoofer_id).name, self.vps.get_vp_by_id(measurement.observer_id).name)

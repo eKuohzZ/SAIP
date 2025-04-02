@@ -8,7 +8,7 @@ import netifaces as ni
 
 import utils.conf as cf
 import utils.measurement as ms
-import signals
+import spoofer.signals as signals
 
 
 vps = cf.VPsConfig()
@@ -23,14 +23,14 @@ def get_mac(target_ip):
             return result[0][1].hwsrc
 
 #create socket
-skt2 = conf.L2socket()
+#skt2 = conf.L2socket()
 skt3 = conf.L3socket()
 #get gateway and mac address
-gateway = ni.gateways()['default'][ni.AF_INET][0]
-macaddr = get_mac(gateway)
+#gateway = ni.gateways()['default'][ni.AF_INET][0]
+#macaddr = get_mac(gateway)
 #build packet header
-ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
-icmp_pkt = raw(ICMP(id=1459, seq=2636) / b'haha')
+#ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
+#icmp_pkt = raw(ICMP(id=1459, seq=2636) / b'haha')
 
 def ttl_send(measurement: ms.Measurement, target_file):
     #setting
@@ -39,6 +39,7 @@ def ttl_send(measurement: ms.Measurement, target_file):
     #send start signal to observer
     print('tell observer to start sniff...')
     signals.observer_start_sniff(measurement)
+    time.sleep(10)
     #start sending packets
     print('start sending ICMP packets...')
     with open(target_file) as ifile:
@@ -49,9 +50,11 @@ def ttl_send(measurement: ms.Measurement, target_file):
                 ttl = 64
                 target = line.strip()
                 #send IP spoofing packet
-                ip_pkt = raw(IP(src=observer.public_addr, dst=target, ttl=ttl, proto=1, len=32))
-                packet = ether_pkt + ip_pkt + icmp_pkt
-                skt2.send(packet)
+                ip_pkt = IP(src=observer.public_addr, dst=target, ttl=ttl, proto=1)
+                icmp_pkt = ICMP(id=1459, seq=2636) 
+                packet = ip_pkt / icmp_pkt / b'haha'
+                #packet = ether_pkt + ip_pkt + icmp_pkt
+                skt3.send(packet)
                 end_time = time.time()
                 elapsed = end_time - start_time
                 #control the sending speed
