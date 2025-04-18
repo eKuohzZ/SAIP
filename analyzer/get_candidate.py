@@ -49,7 +49,7 @@ def get_candidate_vp(input_file_dir, input_file_name, date, experiment_id, hitli
     s3_buket.upload_files(s3_candidate_vp_file, candidate_file)
 
 
-def get_candidate_vps(date, experiment_id):
+def get_candidate_vps(date, experiment_id, if_download):
     data_path = cf.get_data_path(date, experiment_id)
     print('filter anycast candidate by saip-ttl...')
     #get icmp hitlist
@@ -101,7 +101,7 @@ def get_candidate_vps(date, experiment_id):
         ll = candidate.split('.')
         prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
         candidate_prefix.add(prefix)
-    if cf.if_download_data():
+    if if_download:
         active_ipv4_data_file = '{}/active_ipv4.txt'.format(data_path)
     else:
         active_ipv4_data_file = './config/target.csv'

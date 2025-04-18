@@ -44,7 +44,7 @@ class Analyzer:
                 break
         return
 
-    def end_measurement(self, measurement: ms.Measurement) -> bool:
+    def end_measurement(self, measurement: ms.Measurement, if_download: bool) -> bool:
         with self.lock:
             experiment = self.experiment
             if experiment.id != measurement.experiment_id:
@@ -58,7 +58,7 @@ class Analyzer:
                 self.start_measurement()
                 return False
             if measurement.method == 'ttl':
-                get_candidate.get_candidate_vps(measurement.date, measurement.experiment_id)
+                get_candidate.get_candidate_vps(measurement.date, measurement.experiment_id, if_download)
                 signals.scanner_start(measurement)
                 return True
             if measurement.method == 'tcp':
@@ -86,15 +86,15 @@ class Analyzer:
             self.start_measurement()
         return True
         
-    def start_experiment(self):
+    def start_experiment(self, if_download: bool):
         with self.lock:
             experiment_id = cf.get_experiment_id()
             date = cf.get_date()
             self.experiment = ex.Experiment(self.vps, experiment_id, date)
-        build_icmp_hitlist.build_hitlist(self.experiment.date, self.experiment.id)
+        build_icmp_hitlist.build_hitlist(self.experiment.date, self.experiment.id, if_download)
         return
 
-    def get_status(self, is_scan: bool):
+    def get_status(self, is_scan: bool, if_download: bool):
         while True:
             if is_scan:
                 response = signals.scanner_get_status()
@@ -105,15 +105,15 @@ class Analyzer:
                 for oberver_id in self.vps_status['observer']:
                     response = signals.observer_get_status(oberver_id)
                     if response['status'] == 'finished':
-                        if self.end_measurement(ms.Measurement.from_dict(response['measurement'])):
+                        if self.end_measurement(ms.Measurement.from_dict(response['measurement']), if_download):
                             return
             time.sleep(10)
             
         
-    def run(self):
-        self.start_experiment()
+    def run(self, if_download: bool):
+        self.start_experiment(if_download)
         with self.lock:
             self.start_measurement()
-        self.get_status(False)
-        self.get_status(True)
-        self.get_status(False)
+        self.get_status(False, if_download)
+        self.get_status(True, if_download)
+        self.get_status(False, if_download)

@@ -6,11 +6,11 @@ import subprocess
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 
-def build_hitlist(date, experiment_id):
+def build_hitlist(date, experiment_id, if_download):
     data_path = cf.get_data_path(date, experiment_id)
     s3_buket = s3bu.S3Bucket()
     # download active ipv4 data from s3
-    if cf.if_download_data():
+    if if_download:
         s3_active_ipv4_dir_list = s3_buket.get_list_s3('active_ip/ipv4')
         for dir in reversed(s3_active_ipv4_dir_list):
             if s3_buket.check_file_exist('active_ip/ipv4/{}'.format(dir), 'icmp.txt.xz'):

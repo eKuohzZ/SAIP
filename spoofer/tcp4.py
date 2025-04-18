@@ -46,7 +46,7 @@ def tcp_send(measurement: ms.Measurement, target_file):
             dport = int(line.split(',')[1])
             sample_len = min(cf.get_number_of_ports('tcp'), len(cf.get_tcp_port('tcp')))
             port_list = random.sample(cf.get_tcp_port('tcp'), sample_len)
-            print(port_list)
+            #print(port_list)
             for sport in port_list:
                 start_time = time.time()
                 iptcp_pkt = IP(src=observer.public_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000)
