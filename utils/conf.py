@@ -16,6 +16,7 @@ S3_CONFIG = {
             "SECRET_KEY": "36V4ojbvCUhCdyPzlqswarF0YUrqFSNN",
             "BUCKET_NAME": "kdp",
             "ENDPOINT_URL": "http://166.111.121.63:59000/",
+            #"ENDPOINT_URL": "https://minio.ki3.org.cn",
         }
 
 # Vantage points configuration
@@ -39,7 +40,8 @@ class VPsConfig:
         self.vps = []
 
         with open("config/vps.csv", 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
+            lines = [line for line in f if not line.strip().startswith('#')]
+            reader = csv.DictReader(lines)
             id = 0
             for row in reader:
                 if row['PROPERTY'] == 'analyzer':

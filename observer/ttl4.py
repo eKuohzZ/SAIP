@@ -24,7 +24,7 @@ def ttl_sniff():
     print('start sniffing ICMP packets...')
     observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn src not {} and icmp and icmp[0] == 0 -w - -U".format(
+    command_tcpdump = "tcpdump -i {} -B 4096 -nn src not {} and icmp and icmp[0] == 0 -w - -U".format(
     observer.network_interface, 
     observer.private_addr
 )

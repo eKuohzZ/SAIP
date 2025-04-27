@@ -34,7 +34,7 @@ skt3 = conf.L3socket()
 
 def tcp_send(observer_id, target_file, pps):
     observer = vps.get_vp_by_id(observer_id)
-    interval = 1 / pps
+    interval = 1 / pps * 10
     print('start sending TCPa packets...')
     with open(target_file) as ifile:
         lines = ifile.readlines()

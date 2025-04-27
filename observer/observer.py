@@ -52,16 +52,6 @@ class Observer:
             s3_buket.upload_files(s3_measurement_result_file, compress_file)
 
         if measurement.method == 'tcp':
-            '''
-            args = ['python', os.path.join(current_dir, 'tcp4.py'), '--date', measurement.date, '--method', 'tcpa', '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id]
-            task_tcpa_sniff = subprocess.Popen(args)
-            args = ['python', os.path.join(current_dir, 'tcp4a_send.py'), '--date', measurement.date, '--mID', measurement.experiment_id, '--spoofer', measurement.spoofer_id, '--observer', measurement.observer_id, '--pps', measurement.pps]
-            task_tcpa_send = subprocess.Popen(args)
-            task_tcpa_send.wait()
-            time.sleep(120)
-            task_tcpa_sniff.terminate()
-            '''
-
             s3_buket = s3bu.S3Bucket()
             s3_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(measurement.date, measurement.experiment_id)
             local_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)

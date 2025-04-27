@@ -1,43 +1,55 @@
+#!/usr/bin/env python3
 # -*- coding:utf8 -*-
-from scapy.all import *
-from scapy.layers.dns import DNSRR, DNSQR
-import subprocess
 import argparse
+import os
+import subprocess
+import sys
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import utils.conf as cf
 
-vps = cf.VPsConfig()
+RING_BUFFER_MIB = 8192   # tcpdump -B value
+SNAPLEN = 96             # tcpdump -s value (enough for TCP header)
 
 def tcp_sniff():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--date', type=str, help='YYYY-mm-dd')
-    parser.add_argument('--method', type=str, help='tcp, tcp_s or tcp_a')
-    parser.add_argument('--mID', type=int, help='ID of experiment')
-    parser.add_argument('--spoofer', type=int, help='ID of spoofer')
-    parser.add_argument('--observer', type=int, help='ID of observer')
-    date = parser.parse_args().date
-    method = parser.parse_args().method
-    experiment_id = parser.parse_args().mID
-    spoofer_id = parser.parse_args().spoofer
-    observer_id = parser.parse_args().observer
+    parser.add_argument('--date', required=True)
+    parser.add_argument('--method', required=True, choices=['tcp', 'tcps', 'tcpa'])
+    parser.add_argument('--mID', required=True, type=int)
+    parser.add_argument('--spoofer', required=True, type=int)
+    parser.add_argument('--observer', required=True, type=int)
+    args = parser.parse_args()
+
+    vps = cf.VPsConfig()
+    observer = vps.get_vp_by_id(args.observer)
+
+    # Build BPF: src not <private_ip> and (dst port p1 or dst port p2 …) and tcp
+    port_list = cf.get_tcp_port(args.method)
+    port_expr = ' or '.join(f'dst port {p}' for p in port_list)
+    bpf = f"src not {observer.private_addr} and ({port_expr}) and tcp"
+
     print('start sniffing TCP packets...')
-    observer = vps.get_vp_by_id(observer_id)
     #tcpdump
-    command_tcpdump = "tcpdump -i {} -nn 'src not {} and (dst {} or dst {}) and tcp' -w - -U".format(
-    observer.network_interface, 
-    observer.private_addr, 
-    observer.public_addr, 
-    observer.private_addr
-)
+    tcpdump_cmd = [
+        'tcpdump', '-i', observer.network_interface,
+        '-nn', f'-B{RING_BUFFER_MIB}', f'-s{SNAPLEN}', '-U',
+        bpf, '-w', '-',
+    ]
+
     #tcp packet process script
-    command_process = "python3 {} --date {} --method {} --mID {} --spoofer {} --observer {}".format(os.path.join(current_dir, 'sniff_tcp4.py'), date, method, experiment_id, spoofer_id, observer_id)
+    process_cmd = [
+        'python3', os.path.join(current_dir, 'sniff_tcp4.py'),
+        '--date', args.date,
+        '--method', args.method,
+        '--mID', str(args.mID),
+        '--spoofer', str(args.spoofer),
+        '--observer', str(args.observer),
+    ]
     #tcpdump sniffing and send to process script
-    process_tcpdump = subprocess.Popen(command_tcpdump, shell=True, stdout=subprocess.PIPE)
-    process_process = subprocess.Popen(command_process, shell=True, stdin=process_tcpdump.stdout)
-    process_process.wait()
+    with subprocess.Popen(tcpdump_cmd, stdout=subprocess.PIPE) as pcap_proc, subprocess.Popen(process_cmd, stdin=pcap_proc.stdout) as worker_proc:
+        worker_proc.wait()
     print('end sniffing TCP packets!')
 
 if __name__ == '__main__':

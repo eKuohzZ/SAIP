@@ -98,13 +98,13 @@ class Analyzer:
         while True:
             if is_scan:
                 response = signals.scanner_get_status()
-                if response['status'] == 'finished':
+                if response != None and response['status'] == 'finished':
                     if self.end_scan(ms.Measurement.from_dict(response['measurement'])):
                         return
             else:
                 for oberver_id in self.vps_status['observer']:
                     response = signals.observer_get_status(oberver_id)
-                    if response['status'] == 'finished':
+                    if response != None and response['status'] == 'finished':
                         if self.end_measurement(ms.Measurement.from_dict(response['measurement']), if_download):
                             return
             time.sleep(10)

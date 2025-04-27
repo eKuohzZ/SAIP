@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding:utf8 -*-
 import sys
 import csv
@@ -14,6 +15,9 @@ import argparse
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import utils.conf as cf
+
+BUFFER_SIZE = 1000
+RING_BUFFER_SIZE = 8*1024*1024
 
 vps = cf.VPsConfig()
 
@@ -50,9 +54,12 @@ def tcp_flags_str(flags):
     # return a string containing all the flags that are set
     return ''.join(active_flags)
 
-def handle_termination_signal(output_file, signum, frame):
+def handle_termination_signal(output_file, writer, write_buffer, signum, frame):
     print("Process is terminating. Flushing data...")
     if not output_file.closed:
+        if write_buffer:
+            writer.writerows(write_buffer)
+            write_buffer.clear()
         output_file.flush()
         output_file.close()
     sys.exit(0)
@@ -77,42 +84,57 @@ def process_tcp():
     if not os.path.exists(local_tcp_result_dir):
         os.makedirs(local_tcp_result_dir)
     local_tcp_result_file = '{}/{}_result/{}-{}.csv'.format(data_path, method, spoofer_id, observer_id)
-    output_file = open(local_tcp_result_file, 'w', newline='')
+    
+    # 使用批量写入缓存
+    write_buffer = []
+    
+    # 创建文件时设置更大的缓冲区
+    output_file = open(local_tcp_result_file, 'w', newline='', buffering=RING_BUFFER_SIZE)
     writer = csv.writer(output_file)
-    handler_with_file = partial(handle_termination_signal, output_file)
+    handler_with_file = partial(handle_termination_signal, output_file, writer, write_buffer)
     signal.signal(signal.SIGTERM, handler_with_file)
     signal.signal(signal.SIGINT,  handler_with_file)
-    # receive data from tcpdump
+    
     pcap = dpkt.pcap.Reader(sys.stdin.buffer)
-    for timestamp, buf in pcap:
-        try:
-            eth = dpkt.ethernet.Ethernet(buf)
-            ip = eth.data
-            tcp = ip.data
+    
+    try:
+        for timestamp, buf in pcap:
+            try:
+                eth = dpkt.ethernet.Ethernet(buf)
+                ip = eth.data
+                tcp = ip.data
+                    
+                ip_src = socket.inet_ntoa(ip.src)
+                ip_ttl = ip.ttl
+                tcp_dport = tcp.dport
+                tcp_sport = tcp.sport
+                tcp_ack = tcp.ack
+                tcp_seq = tcp.seq
+                tcp_flags = tcp_flags_str(tcp.flags)
                 
-            ip_src = socket.inet_ntoa(ip.src)
-            ip_ttl = ip.ttl
-            tcp_dport = tcp.dport
-            tcp_sport = tcp.sport
-            tcp_ack = tcp.ack
-            tcp_seq = tcp.seq
-            tcp_flags = tcp_flags_str(tcp.flags)
-            #print('Recieved TCP packet with flags: {}, seq: {}, ack: {}, src: {}, sport: {}, dport: {}, ttl: {}, timestamp: {}'.format(tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp))
-            if tcp_dport in port_list:
-                # send ACK (second handshake)
-                # print('Recieved TCP packet with flags: {}, seq: {}, ack: {}, src: {}, sport: {}, dport: {}, ttl: {}, timestamp: {}'.format(tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp))
-                if tcp_flags == 'SA' and tcp_ack == 1001:
-                    data = (
-                        b"Hello"
-                    )
-                    iptcpPkt = IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data)
-                    packet = iptcpPkt    
-                    skt3.send(packet)
-                writer.writerow([tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp])
-        except:
-            pass
-        
-    output_file.close()
+                if tcp_dport in port_list:
+                    write_buffer.append([tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp])
+                    
+                    if tcp_flags == 'SA' and tcp_ack == 1001:
+                        data = b"Hello"
+                        iptcpPkt = IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data)
+                        packet = iptcpPkt    
+                        skt3.send(packet)
+                    if len(write_buffer) >= BUFFER_SIZE:
+                        writer.writerows(write_buffer)
+                        write_buffer.clear()
+                        
+            except Exception as e:
+                continue
+                
+    finally:
+        # 确保剩余数据被写入
+        if not output_file.closed:
+            if write_buffer:
+                writer.writerows(write_buffer)
+                write_buffer.clear()
+            output_file.flush()
+            output_file.close()
 
 if __name__ == '__main__':
     process_tcp()

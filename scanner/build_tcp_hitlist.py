@@ -8,6 +8,8 @@ import random
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 
+LEN_RECENT_RATE_CHANGES = 10
+
 def select_random_percentage(array, percentage):
     # calculate the number of elements to select
     num_elements_to_select = max(1, int(len(array) * percentage / 100))
@@ -130,7 +132,7 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
         else:
             change_rate = 0
         recent_rate_changes.append(change_rate)
-        if len(recent_rate_changes) > 10:
+        if len(recent_rate_changes) > LEN_RECENT_RATE_CHANGES:
             recent_rate_changes.pop(0)
         avg_change_rate = sum(recent_rate_changes) / len(recent_rate_changes)
         if avg_change_rate < 0.01:
@@ -145,40 +147,3 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
     s3_tcp_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(date, experiment_id)
     print('upload tcp_hitlist file [{}] to [{}]...'.format(tcp_hitlist_file, s3_tcp_hitlist_file))
     s3_buket.upload_files(s3_tcp_hitlist_file, tcp_hitlist_file)
-
-'''
-def build_tcp_hitlist_vps(date, experiment_id):
-    data_path = cf.get_data_path(date, experiment_id)
-    #download tcp_hitlist_vp file
-    s3_buket = s3bu.S3Bucket()
-    tcp_hitlist_filenames = s3_buket.get_list_s3('saip/{}/{}/hitlists_tcp'.format(date, experiment_id))
-    local_tcp_hitlist_dir = '{}/hitlists_tcp'.format(data_path)
-    if not os.path.exists(local_tcp_hitlist_dir):
-        os.makedirs(local_tcp_hitlist_dir)
-    for tcp_hitlist_filename in tcp_hitlist_filenames:
-        local_tcp_hitlist_file = '{}/hitlists_tcp/{}'.format(data_path, tcp_hitlist_filename)
-        s3_tcp_hitlist_file = 'saip/{}/{}/hitlists_tcp/{}'.format(date, experiment_id, tcp_hitlist_filename)
-        print('download tcp_hitlist_vp file [{}] to [{}]...'.format(s3_tcp_hitlist_file, local_tcp_hitlist_file))
-        s3_buket.download_file(s3_tcp_hitlist_file, local_tcp_hitlist_file)
-    #build tcp hitlist
-    tcp_hitlist = set()
-    prefix_in_hitlist = set()
-    for filename in os.listdir(local_tcp_hitlist_dir):
-        with open(os.path.join(local_tcp_hitlist_dir, filename)) as ifile:
-            lines = ifile.readlines()
-            for line in lines:
-                line = line.strip()
-                target  = line.split(',')[0]
-                prefix = target.split('.')[0] + '.' + target.split('.')[1] + '.' + target.split('.')[2]
-                if prefix not in prefix_in_hitlist:
-                    prefix_in_hitlist.add(prefix)
-                    tcp_hitlist.add(line)
-    local_tcp_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)
-    with open(local_tcp_hitlist_file, 'w') as ofile:
-        for elm in tcp_hitlist:
-            print(elm, file = ofile)
-    #upload to s3
-    s3_tcp_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(date, experiment_id)
-    print('upload tcp_hitlist file [{}] to [{}]...'.format(local_tcp_hitlist_file, s3_tcp_hitlist_file))
-    s3_buket.upload_files(s3_tcp_hitlist_file, local_tcp_hitlist_file)
-'''

@@ -30,7 +30,7 @@ skt3 = conf.L3socket()
 
 def tcp_send(measurement: ms.Measurement, target_file):
     observer = vps.get_vp_by_id(measurement.observer_id)
-    interval = 1 / measurement.pps
+    interval = 1 / measurement.pps * 2.5
     #send start signal to observer
     print('tell observer to start sniff...')
     signals.observer_start_sniff(measurement)
