@@ -1,13 +1,9 @@
 import threading
 import time
-import subprocess
-
-from flask import Flask, g, request
-from dataclasses import dataclass, field
-from typing import List, Dict
 
 import utils.measurement as ms
 import utils.conf as cf
+import utils.vps as vpcf
 import analyzer.signals as signals
 import analyzer.build_icmp_hitlist as build_icmp_hitlist
 import analyzer.get_candidate as get_candidate
@@ -16,17 +12,19 @@ import analyzer.experiment as ex
 
 
 class Analyzer:
-    def __init__(self):
-        self.vps = cf.VPsConfig()
+    def __init__(self, ip_type: str):
+        self.vps = vpcf.VPsConfig()
         self.lock = threading.Lock()
         self.experiment = None
         self.stop_event = threading.Event()
         self.is_scan_finished = False
+        self.ip_type = ip_type
+        #init vps network bandwidth status
         self.vps_status = {'spoofer': {}, 'observer': {}}
-        for spoofer in self.vps.get_spoofers:
+        for spoofer in self.vps.get_spoofers[ip_type]:
             self.vps_status['spoofer'][spoofer.id] = spoofer.spoofer_pps
             self.vps_status['observer'][spoofer.id] = spoofer.observer_pps
-        for non_spoofer in self.vps.get_non_spoofers:
+        for non_spoofer in self.vps.get_non_spoofers[ip_type]:
             self.vps_status['observer'][non_spoofer.id] = non_spoofer.observer_pps
 
     def start_measurement(self):
@@ -58,16 +56,16 @@ class Analyzer:
                 self.start_measurement()
                 return False
             if measurement.method == 'ttl':
-                get_candidate.get_candidate_vps(measurement.date, measurement.experiment_id, if_download)
+                get_candidate.get_candidate_vps(measurement.date, measurement.experiment_id, if_download, self.ip_type)
                 signals.scanner_start(measurement)
                 return True
             if measurement.method == 'tcp':
-                get_anycast.get_anycast_vps(measurement.date, measurement.experiment_id)
-                for spoofer in self.vps.get_spoofers:
-                    signals.spoofer_end(measurement.date, measurement.experiment_id, spoofer.id)
-                for non_spoofer in self.vps.get_non_spoofers:
-                    signals.observer_end(measurement.date, measurement.experiment_id, non_spoofer.id)
-                signals.scanner_end(measurement.date, measurement.experiment_id)
+                get_anycast.get_anycast_vps(measurement.date, measurement.experiment_id, self.ip_type)
+                for spoofer in self.vps.get_spoofers[self.ip_type]:
+                    signals.spoofer_end(measurement.date, measurement.experiment_id, spoofer.id, self.ip_type)
+                for non_spoofer in self.vps.get_non_spoofers[self.ip_type]:
+                    signals.observer_end(measurement.date, measurement.experiment_id, non_spoofer.id, self.ip_type)
+                signals.scanner_end(measurement.date, measurement.experiment_id, self.ip_type)
                 #subprocess.run(['rm', '-r', cf.get_data_path(measurement.date, measurement.experiment_id)])
                 self.experiment = None
                 self.is_scan_finished = False
@@ -90,8 +88,9 @@ class Analyzer:
         with self.lock:
             experiment_id = cf.get_experiment_id()
             date = cf.get_date()
-            self.experiment = ex.Experiment(self.vps, experiment_id, date)
-        build_icmp_hitlist.build_hitlist(self.experiment.date, self.experiment.id, if_download)
+            self.experiment = ex.Experiment(self.vps, experiment_id, date, self.ip_type)
+            self.experiment.init_ttl_measurement(self.vps)
+        build_icmp_hitlist.build_hitlist(self.experiment.date, self.experiment.id, if_download, self.ip_type)
         return
 
     def get_status(self, is_scan: bool, if_download: bool):
@@ -114,6 +113,6 @@ class Analyzer:
         self.start_experiment(if_download)
         with self.lock:
             self.start_measurement()
-        self.get_status(False, if_download)
-        self.get_status(True, if_download)
-        self.get_status(False, if_download)
+        self.get_status(False, if_download) #run saip-ttl and wait for finish
+        self.get_status(True, if_download) #run tcp port scan and wait for finish
+        self.get_status(False, if_download) #run saip-tcp and wait for finish

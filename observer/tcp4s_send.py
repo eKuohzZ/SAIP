@@ -1,45 +1,58 @@
 # -*- coding:utf8 -*-
-import time
-
-from scapy.all import *
-from scapy.layers.dns import DNSRR, DNSQR
-import tqdm
-import netifaces as ni
-import multiprocessing
-import random
 import argparse
+import multiprocessing
+import os
+import random
+from scapy.all import IP, TCP, raw
+import socket
+import sys
+import time
+import tqdm
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import utils.conf as cf
+import utils.vps as vpcf
 
-vps = cf.VPsConfig()
+vps = vpcf.VPsConfig()
 
-def get_mac(target_ip):
-    while True:
-        arp = ARP(pdst=target_ip)
-        ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-        packet = ether / arp
-        result = srp(packet, timeout=3, verbose=False)[0]
-        if result:
-            return result[0][1].hwsrc
-        
-#skt2 = conf.L2socket()
-skt3 = conf.L3socket()
-#gateway = ni.gateways()['default'][ni.AF_INET][0]
-#macaddr = get_mac(gateway)
+def update_checksums(buf):
+    pkt = IP(buf)      # 把字节流重新解析成 Scapy 包
+    del pkt[IP].chksum # 删掉旧校验和字段
+    del pkt[TCP].chksum
+    return bytearray(bytes(pkt))
 
-#ether_pkt = raw(Ether(dst=macaddr, type=0x0800))
+def send_tcp_bytes(sock, template, dst_ip, sport, dport):
+    # IP dst @ offset 16–19
+    # TCP sport @ 20–21, dport @ 22–23
+    buf = bytearray(template)  # make a fresh copy
+    buf[16:20] = socket.inet_aton(dst_ip)
+    buf[20:22] = sport.to_bytes(2, 'big')
+    buf[22:24] = dport.to_bytes(2, 'big')
+    buf = update_checksums(buf)  # 更新校验和
+    sock.sendto(bytes(buf), (dst_ip, 0))
 
 def tcp_send(observer_id, target_file, pps):
     observer = vps.get_vp_by_id(observer_id)
-    interval = 1 / pps * 2.5
+    interval = 1 / pps * 20
+
+     # open raw socket once
+    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+
+    # pre-build an “empty” IP/TCP SYN packet
+    base = (
+        IP(src=observer.private_addr_4, dst="0.0.0.0", proto=6) /
+        TCP(sport=0, dport=0, flags="S", seq=1000)
+    )
+    template = raw(base)  # bytes
+
     print('start sending TCPs packets...')
     with open(target_file) as ifile:
         lines = ifile.readlines()
         random.shuffle(lines)
-        for line in tqdm.tqdm(lines):
+        for line in tqdm.tqdm(lines, desc='scan tcps: '):
             line = line.strip()
             target = line.split(',')[0]
             dport = int(line.split(',')[1])
@@ -47,13 +60,12 @@ def tcp_send(observer_id, target_file, pps):
             port_list = random.sample(cf.get_tcp_port('tcps'), sample_len)
             for sport in port_list:
                 start_time = time.time()
-                iptcpPkt = IP(src=observer.private_addr, dst=target) / TCP(sport=sport, dport=dport, flags="S", seq=1000)
-                packet = iptcpPkt
-                skt3.send(packet)
+                send_tcp_bytes(sock, template, target, sport, dport)
                 end_time = time.time()
                 elapsed = end_time - start_time
                 if elapsed < interval:
                     time.sleep(interval - elapsed)
+    sock.close()
     print('end sending TCPs packets!')
 
 def do_tcp_measure():

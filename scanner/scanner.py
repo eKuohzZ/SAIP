@@ -5,17 +5,15 @@ import subprocess
 from flask import Flask, request, jsonify
 
 import scanner.build_tcp_hitlist as bth
-import utils.S3BucketUtil as s3bu
 import utils.conf as cf
 import utils.measurement as ms
-import scanner.signals as signals
-
+import utils.vps as vpcf
 
 class Scanner:
     def __init__(self):
         self.app = Flask(__name__)
         self.setup_routes()
-        self.vps = cf.VPsConfig()
+        self.vps = vpcf.VPsConfig()
         self.status = "initialized"
         self.lock = threading.Lock()
         self.measurement = None
@@ -28,7 +26,10 @@ class Scanner:
 
     def run_scan_task(self, measurement: ms.Measurement):
         scanner = self.vps.get_scanner
-        bth.build_tcp_hitlist_vp(measurement.date, measurement.experiment_id, scanner.spoofer_pps, scanner.network_interface)
+        if measurement.ip_type == 'ipv4':
+            bth.build_tcp_hitlist_vp(measurement.date, measurement.experiment_id, scanner.spoofer_pps, scanner.network_interface_4, measurement.ip_type)
+        elif measurement.ip_type == 'ipv6':
+            bth.build_tcp_hitlist_vp(measurement.date, measurement.experiment_id, scanner.spoofer_pps, scanner.network_interface_6, measurement.ip_type)
         with self.lock:
             self.status = 'finished'
     
@@ -46,7 +47,8 @@ class Scanner:
         data = request.get_json()
         date = data['date']
         experiment_id = data['experiment_id']
-        data_path = cf.get_data_path(date, experiment_id)
+        ip_type = data['ip_type']
+        data_path = cf.get_data_path(date, experiment_id, ip_type)
         with self.lock:
             self.status = 'initialized'
             self.measurement = None

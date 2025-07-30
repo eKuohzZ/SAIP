@@ -7,8 +7,11 @@ import random
 
 import utils.S3BucketUtil as s3bu
 import utils.conf as cf
+import utils.vps as cfvp
 
-LEN_RECENT_RATE_CHANGES = 10
+vps = cfvp.VPsConfig()
+
+LEN_RECENT_RATE_CHANGES = 20
 
 def select_random_percentage(array, percentage):
     # calculate the number of elements to select
@@ -18,11 +21,11 @@ def select_random_percentage(array, percentage):
     
     return selected_elements
 
-def get_common_port(date, experiment_id, rate, interface):
-    data_path = cf.get_data_path(date, experiment_id)
+def get_common_port(date, experiment_id, rate, interface, ip_type):
+    data_path = cf.get_data_path(date, experiment_id, ip_type)
     #download candidate file
     s3_buket = s3bu.S3Bucket()
-    s3_candidate_file = 'saip/{}/{}/candidate_vps.csv'.format(date, experiment_id)
+    s3_candidate_file = 'saip/{}/{}/{}/candidate_vps.csv'.format(ip_type, date, experiment_id)
     local_candidate_file = '{}/candidate_vps.csv'.format(data_path)
     print('download candidate file [{}]to [{}]'.format(s3_candidate_file, local_candidate_file))
     s3_buket.download_file(s3_candidate_file, local_candidate_file)
@@ -39,9 +42,15 @@ def get_common_port(date, experiment_id, rate, interface):
             print(sample, file=ofile)
     #port scan
     sample_port_scan_result_file = '{}/sample_port_scan_result.csv'.format(data_path)
-    command = 'zmap -s 47000-50000 -p 0-65535 --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(rate, interface, sample_candidate_file, sample_port_scan_result_file)
+    if ip_type == 'ipv4':
+        command = 'zmap -s 47000-50000 -p 0-65535 --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(rate, interface, sample_candidate_file, sample_port_scan_result_file)
+        subprocess.run(command, shell=True)
+    else:
+        scanner = vps.scanner
+        for port in range(0, 65536):
+            command = 'zmap --probe-module=ipv6_tcp_synscan --ipv6-source-ip={} -s 47000-50000 -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --ipv6-target-file={} | tee -a {}'.format(scanner.private_addr_6, str(port), rate, interface, sample_candidate_file, sample_port_scan_result_file)
+            subprocess.run(command, shell=True)
     #command = 'zmap -p 80 --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(rate, interface, down_local_file, sample_port_scan_result_file)
-    subprocess.run(command, shell=True)
     #获取port的出现频率
     port2feq = {}
     with open(sample_port_scan_result_file) as ifile:
@@ -68,18 +77,27 @@ def get_common_port(date, experiment_id, rate, interface):
             ports_by_rank.append(port)
             output = port + ',' + str(port2feq[port])
             print(output, file = ofile)
+        for port in random.sample(range(0, 65536), 65536):
+            if port not in port2feq:
+                ports_by_rank.append(str(port))
+                output = str(port) + ',' + str(0)
+                print(output, file = ofile)
     return ports_by_rank
 
-def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
-    data_path = cf.get_data_path(date, experiment_id)
-    ports_by_rank = get_common_port(date, experiment_id, rate, interface)
+def build_tcp_hitlist_vp(date, experiment_id, rate, interface, ip_type):
+    data_path = cf.get_data_path(date, experiment_id, ip_type)
+    if ip_type == 'ipv4':
+        ports_by_rank = get_common_port(date, experiment_id, rate, interface, ip_type)
+    else:
+        ports_by_rank = get_common_port(date, experiment_id, rate, interface, ip_type)
     #download port2scan file
     s3_buket = s3bu.S3Bucket()
-    s3_ip2scan_file = 'saip/{}/{}/ip2do_port_scan.csv'.format(date, experiment_id)
+    s3_ip2scan_file = 'saip/{}/{}/{}/ip2do_port_scan.csv'.format(ip_type, date, experiment_id)
     local_ip2scan_file = '{}/ip2do_port_scan.csv'.format(data_path)
     print('download ip2do_port_scan file [{}] to [{}]'.format(s3_ip2scan_file, local_ip2scan_file))
     s3_buket.download_file(s3_ip2scan_file, local_ip2scan_file)
     #port scan
+    start_time = time.time()
     port_scan_result_file = '{}/port_scan_result.csv'.format(data_path)
     tcp_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)
     hitlist = []
@@ -87,7 +105,11 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
     record_file = '{}/port_scan_record.csv'.format(data_path)
     recent_rate_changes = []
     for port in ports_by_rank:
-        command = 'zmap -s 47000-50000 -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(port, rate, interface, local_ip2scan_file, port_scan_result_file)
+        if ip_type == 'ipv4':
+            command = 'zmap -s 47000-50000 -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(port, rate, interface, local_ip2scan_file, port_scan_result_file)
+        else:
+            scanner = vps.scanner
+            command = 'zmap --probe-module=ipv6_tcp_synscan --ipv6-source-ip={} -s 47000-50000 -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --ipv6-target-file={} -o {}'.format(scanner.private_addr_6, port, rate, interface, local_ip2scan_file, port_scan_result_file)
         #command = 'zmap -p {} --output-filter="success = 1 && repeat = 0 && classification = synack" -r {} -i {} -f "saddr,sport" --allowlist-file={} -o {}'.format(port2sacn, rate, interface, down_local_file, port_scan_result_file)
         subprocess.run(command, shell=True)
         new_ip2scan = set()
@@ -102,8 +124,11 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
                     target  = ll[0]
                     port = ll[1]
                     if port == '' or port == 'sport': continue
-                    lll = target.split('.')
-                    prefix = lll[0] + '.' + lll[1] + '.' + lll[2]
+                    if ip_type == 'ipv4':
+                        lll = target.split('.')
+                        prefix = lll[0] + '.' + lll[1] + '.' + lll[2]
+                    else:
+                        prefix = cf.extract_ipv6_48_prefix(target)
                     if prefix not in active_prefix:
                         active_prefix.add(prefix)
                         hitlist.append((target, port))
@@ -114,8 +139,11 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
                 if not lines: break
                 for line in lines:
                     target = line.strip()
-                    ll = line.strip().split('.')
-                    prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
+                    if ip_type == 'ipv4':
+                        ll = line.strip().split('.')
+                        prefix = ll[0] + '.' + ll[1] + '.' + ll[2]
+                    else:
+                        prefix = cf.extract_ipv6_48_prefix(target)
                     if prefix not in active_prefix:
                         new_ip2scan.add(target)
 
@@ -135,7 +163,7 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
         if len(recent_rate_changes) > LEN_RECENT_RATE_CHANGES:
             recent_rate_changes.pop(0)
         avg_change_rate = sum(recent_rate_changes) / len(recent_rate_changes)
-        if avg_change_rate < 0.01:
+        if avg_change_rate == 0 or time.time() - start_time > 86400:  # 1天 = 86400秒
             break
         
     with open(tcp_hitlist_file, 'w') as ofile:
@@ -144,6 +172,6 @@ def build_tcp_hitlist_vp(date, experiment_id, rate, interface):
             print(output, file = ofile)
     
     #上传s3
-    s3_tcp_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(date, experiment_id)
+    s3_tcp_hitlist_file = 'saip/{}/{}/{}/hitlist_tcp.csv'.format(ip_type, date, experiment_id)
     print('upload tcp_hitlist file [{}] to [{}]...'.format(tcp_hitlist_file, s3_tcp_hitlist_file))
     s3_buket.upload_files(s3_tcp_hitlist_file, tcp_hitlist_file)

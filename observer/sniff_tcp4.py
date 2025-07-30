@@ -1,41 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding:utf8 -*-
-import sys
-import csv
-import socket
-import signal
-
-from functools import partial
-from scapy.all import *
-from scapy.layers.dns import DNSRR, DNSQR
-import netifaces as ni
-import dpkt
 import argparse
+import csv
+import dpkt
+from functools import partial
+import os
+from scapy.all import raw, IP, TCP, Raw
+import signal
+import socket
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 import utils.conf as cf
+import utils.vps as vpcf
 
 BUFFER_SIZE = 1000
 RING_BUFFER_SIZE = 8*1024*1024
 
-vps = cf.VPsConfig()
+vps = vpcf.VPsConfig()
 
-def get_mac(target_ip):
-    while True:
-        arp = ARP(pdst=target_ip)
-        ether = Ether(dst="ff:ff:ff:ff:ff:ff")
-        packet = ether / arp
-        result = srp(packet, timeout=3, verbose=False)[0]
-        if result:
-            return result[0][1].hwsrc
-
-#skt2 = conf.L2socket()
-skt3 = conf.L3socket()
-#gateway = ni.gateways()['default'][ni.AF_INET][0]
-#macaddr = get_mac(gateway)
-
-#etherPkt = raw(Ether(dst=macaddr, type=0x0800))
 
 def tcp_flags_str(flags):
     # define a list of tuples, each containing a flag name and its corresponding bitmask
@@ -64,6 +48,25 @@ def handle_termination_signal(output_file, writer, write_buffer, signum, frame):
         output_file.close()
     sys.exit(0)
 
+def update_checksums(buf):
+    pkt = IP(buf)      # 把字节流重新解析成 Scapy 包
+    del pkt[IP].chksum # 删掉旧校验和字段
+    del pkt[TCP].chksum
+    return bytearray(bytes(pkt))
+
+def send_response_bytes(sock, template, dst_ip, sport, dport, seq, ack):
+    buf = bytearray(template)  # copy template
+    # IP dst
+    buf[16:20] = socket.inet_aton(dst_ip)
+    # TCP sport, dport
+    buf[20:22] = sport.to_bytes(2, 'big')
+    buf[22:24] = dport.to_bytes(2, 'big')
+    # TCP seq, ack
+    buf[24:28] = seq.to_bytes(4, 'big')
+    buf[28:32] = ack.to_bytes(4, 'big')
+    buf = update_checksums(buf)
+    sock.sendto(bytes(buf), (dst_ip, 0))
+
 def process_tcp():
     parser = argparse.ArgumentParser()
     parser.add_argument('--date', type=str, help='YYMMDD')
@@ -78,7 +81,7 @@ def process_tcp():
     observer_id = parser.parse_args().observer
     port_list = cf.get_tcp_port(method)
     observer = vps.get_vp_by_id(observer_id)
-    data_path = cf.get_data_path(date, experiment_id)
+    data_path = cf.get_data_path(date, experiment_id, 'ipv4')
     # define output file
     local_tcp_result_dir = '{}/{}_result'.format(data_path, method)
     if not os.path.exists(local_tcp_result_dir):
@@ -91,9 +94,22 @@ def process_tcp():
     # 创建文件时设置更大的缓冲区
     output_file = open(local_tcp_result_file, 'w', newline='', buffering=RING_BUFFER_SIZE)
     writer = csv.writer(output_file)
+
     handler_with_file = partial(handle_termination_signal, output_file, writer, write_buffer)
     signal.signal(signal.SIGTERM, handler_with_file)
     signal.signal(signal.SIGINT,  handler_with_file)
+
+    # build raw socket for responses
+    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, 1)
+
+    # pre-build response template with payload "Hello"
+    base_resp = (
+        IP(src=observer.private_addr_4, dst="0.0.0.0", proto=6) /
+        TCP(sport=0, dport=0, flags="A", seq=0, ack=0) /
+        Raw(load=b"Hello")
+    )
+    template_resp = raw(base_resp)
     
     pcap = dpkt.pcap.Reader(sys.stdin.buffer)
     
@@ -116,10 +132,15 @@ def process_tcp():
                     write_buffer.append([tcp_flags, tcp_seq, tcp_ack, ip_src, tcp_sport, tcp_dport, ip_ttl, timestamp])
                     
                     if tcp_flags == 'SA' and tcp_ack == 1001:
-                        data = b"Hello"
-                        iptcpPkt = IP(src=observer.private_addr, dst=ip_src) / TCP(sport=tcp_dport, dport=tcp_sport, flags="A", seq=tcp_ack, ack=tcp_seq+1)/Raw(load=data)
-                        packet = iptcpPkt    
-                        skt3.send(packet)
+                        send_response_bytes(
+                            sock,
+                            template_resp,
+                            ip_src,
+                            sport=tcp_dport,
+                            dport=tcp_sport,
+                            seq=tcp_ack,
+                            ack=(tcp_seq + 1)
+                        )
                     if len(write_buffer) >= BUFFER_SIZE:
                         writer.writerows(write_buffer)
                         write_buffer.clear()
@@ -128,6 +149,8 @@ def process_tcp():
                 continue
                 
     finally:
+        if sock:
+            sock.close()
         # 确保剩余数据被写入
         if not output_file.closed:
             if write_buffer:

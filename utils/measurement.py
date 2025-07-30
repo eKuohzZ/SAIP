@@ -1,10 +1,6 @@
 # Description: This file contains the class definition for the Measurement object.
-import threading
-
-from typing import Dict
-
 class Measurement:
-    def __init__(self, experiment_id, measurement_id, spoofer_id, observer_id, method, date, pps):
+    def __init__(self, experiment_id, measurement_id, spoofer_id, observer_id, method, date, pps, ip_type):
         self.experiment_id = int(experiment_id)
         self.measurement_id = int(measurement_id)
         self.spoofer_id = int(spoofer_id)
@@ -12,7 +8,7 @@ class Measurement:
         self.method = method
         self.date = date
         self.pps = int(pps)
-
+        self.ip_type = ip_type
     @classmethod
     def from_dict(cls, data):
         experiment_id = int(data["experiment_id"]) if isinstance(data["experiment_id"], (str, float)) else data["experiment_id"]
@@ -28,6 +24,7 @@ class Measurement:
             data["method"],
             data["date"],
             pps,
+            data["ip_type"]
         )
     
     @property
@@ -40,6 +37,7 @@ class Measurement:
             "method": self.method,
             "date": self.date,
             "pps": self.pps,
+            "ip_type": self.ip_type
         }
 
 

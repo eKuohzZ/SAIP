@@ -2,151 +2,231 @@
 Configuration file for SAIP
 """
 
-import csv
 import os
-import random
 import datetime
+import requests
+import re
+from urllib.parse import urljoin
 
-# Input data path
-if_download_data_ans = False
 
-# S3 configuration
+########################################################
+# configuration
+IF_DOWNLOAD = False
+ID_FILE = "config/latest_experiment_id.csv"
+PORT_FILE = "config/port_list.csv"
+NUMBER_OF_PORTS = 10
+VPS_FILE = "config/vps.csv"
 S3_CONFIG = {
             "ACCESS_KEY": "Xu8R1VjptPxb0tQb",
             "SECRET_KEY": "36V4ojbvCUhCdyPzlqswarF0YUrqFSNN",
             "BUCKET_NAME": "kdp",
-            "ENDPOINT_URL": "http://166.111.121.63:59000/",
-            #"ENDPOINT_URL": "https://minio.ki3.org.cn",
+            #"ENDPOINT_URL": "http://166.111.121.63:59000/",
+            "ENDPOINT_URL": "https://minio.ki3.org.cn",
+            "VERIFY_SSL": False, 
         }
 
-# Vantage points configuration
-class VPInfo:
-    def __init__(self, id: int, name: str, role: str, public_addr: str, private_addr: str, network_interface: str, spoofer_pps: int, observer_pps: int, spoofer_port: str, observer_port: str):
-        self.id = id
-        self.name = name
-        self.role = role
-        self.public_addr = public_addr
-        self.private_addr = private_addr
-        self.network_interface = network_interface
-        self.spoofer_pps = spoofer_pps 
-        self.observer_pps = observer_pps
-        self.spoofer_port = spoofer_port
-        self.observer_port = observer_port
+IPV6_HITLIST_BASE_ROOT = "https://alcatraz.net.in.tum.de/ipv6-hitlist-service/registered/output/"
+IPV6_HITLIST_USERNAME = "ruifeng-li-at-tsinghua-edu-cn"
+IPV6_HITLIST_PASSWORD = "9402106ffd3e"
+PORT_RANK_FILE = "config/port_rank.csv"
+########################################################
 
-class VPsConfig:
-    def __init__(self):
-        self.spoofers = []
-        self.non_spoofers = []
-        self.vps = []
 
-        with open("config/vps.csv", 'r', encoding='utf-8') as f:
-            lines = [line for line in f if not line.strip().startswith('#')]
-            reader = csv.DictReader(lines)
-            id = 0
-            for row in reader:
-                if row['PROPERTY'] == 'analyzer':
-                    vp = VPInfo(-1, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
-                    self.analyzer = vp
-                elif row['PROPERTY'] == 'scanner':
-                    vp = VPInfo(-2, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
-                    self.scanner = vp
-                else:
-                    vp = VPInfo(id, row['NAME'], row['PROPERTY'], row['PUBLIC_IP_ADDRESS'], row['PRIVATE_IP_ADDRESS'], row['NETWORK_INTERFACE'], int(row['SPOOFER_PPS']), int(row['OBSERVER_PPS']), row['SPOOFER_PORT'], row['OBSERVER_PORT'])
-                    self.vps.append(vp)
-                    if vp.role == 'spoofer':
-                        self.spoofers.append(vp)
-                    elif vp.role == 'non_spoofer':
-                        self.non_spoofers.append(vp)     
-                    id += 1
+def download_latest_icmp6(local_filename) -> str:
+    base_root = IPV6_HITLIST_BASE_ROOT
+    username = IPV6_HITLIST_USERNAME
+    password = IPV6_HITLIST_PASSWORD
     
-    @property
-    def get_spoofers(self) -> list[VPInfo]:
-        return self.spoofers
+    session = requests.Session()
+    session.auth = (username, password)
     
-    @property
-    def get_non_spoofers(self) -> list[VPInfo]:
-        return self.non_spoofers
-    
-    @property
-    def get_analyzer(self) -> VPInfo:
-        return self.analyzer
+    try:
+        # 1. Get all available months
+        resp = session.get(base_root, timeout=30)
+        resp.raise_for_status()
+        months = re.findall(r'href="(\d{4}-\d{2})/', resp.text)
+        if not months:
+            raise Exception("No month directories found")
+        
+        latest_month = sorted(set(months))[-1]
+        month_url = urljoin(base_root, f"{latest_month}/")
 
-    @property
-    def get_scanner(self) -> VPInfo:
-        return self.scanner
-    
-    @property
-    def get_vps(self) -> list[VPInfo]:
-        return self.vps
-    
-    def get_vp_by_id(self, id) -> VPInfo:
-        return self.vps[id]
+        # 2. Get ICMP file list from the latest month
+        resp = session.get(month_url, timeout=30)
+        resp.raise_for_status()
+        pattern = rf'href="({latest_month}-\d{{2}}-icmp\.csv\.xz)"'
+        files = re.findall(pattern, resp.text)
+        if not files:
+            raise Exception(f"No ICMP files found in {latest_month} directory")
+        
+        latest_file = sorted(files)[-1]
+
+        # 3. Download the latest file
+        download_url = urljoin(month_url, latest_file)
+        
+        print(f"Downloading: {download_url}")
+        with session.get(download_url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            total_size = int(r.headers.get('content-length', 0))
+            
+            with open(local_filename, 'wb') as f:
+                downloaded = 0
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        # Optional: show download progress
+                        if total_size > 0:
+                            progress = (downloaded / total_size) * 100
+                            print(f"Download progress: {progress:.1f}%", end='\r', flush=True)
+
+        print(f"\nDownload completed: {local_filename}")
+        return local_filename
+        
+    except requests.RequestException as e:
+        raise Exception(f"Network error during download: {e}")
+    except Exception as e:
+        print(f"Download failed: {e}")
+        # Clean up incomplete file if download failed
+        if local_filename and os.path.exists(local_filename):
+            os.remove(local_filename)
+        raise
+    finally:
+        session.close()
 
 def get_experiment_id():
-    id_file = "config/latest_experiment_id.csv"
     try:
-        with open(id_file, 'r') as f:
+        with open(ID_FILE, 'r') as f:
             current_id = int(f.read().strip())
         new_id = current_id + 1
-        with open(id_file, 'w') as f:
+        with open(ID_FILE, 'w') as f:
             f.write(str(new_id))
         return new_id
     except FileNotFoundError:
-        with open(id_file, 'w') as f:
+        with open(ID_FILE, 'w') as f:
             f.write('1')
         return 1
     except ValueError:
-        with open(id_file, 'w') as f:
+        with open(ID_FILE, 'w') as f:
             f.write('1')
         return 1
     
-def get_data_path(date, experiment_id):
+def get_data_path(date, experiment_id, ip_type):
     work_dir = os.getcwd()
-    data_dir = os.path.join(work_dir, 'data', date, str(experiment_id))
+    data_dir = os.path.join(work_dir, 'data', ip_type, date, str(experiment_id))
     abs_path = os.path.abspath(data_dir)
     os.makedirs(abs_path, exist_ok=True)
     return abs_path
 
 def if_download_data():
-    return if_download_data_ans
+    return IF_DOWNLOAD
 
 def get_tcp_port(method):
-    port_file = "config/port_list.csv"
     try:
-        with open(port_file, 'r') as f:
+        with open(PORT_FILE, 'r') as f:
             ports = [int(port.strip()) for port in f.readlines()]
 
         group_size = len(ports) // 2
         tcp_ports = ports[:group_size]
         tcps_ports = ports[group_size:]
-        #tcpa_ports = ports[2*group_size:]
         
         if method == 'tcp':
-            #print(tcp_ports)
             return tcp_ports
         elif method == 'tcps':
-            #print(tcps_ports)
             return tcps_ports
-        #elif method == 'tcpa':
-            #return tcpa_ports
         else:
             return []
     except FileNotFoundError:
-        print(f"Error: {port_file} not found")
+        print(f"Error: {PORT_FILE} not found")
         return []
     except ValueError:
-        print(f"Error: Invalid port number in {port_file}")
+        print(f"Error: Invalid port number in {PORT_FILE}")
         return []
     
 def get_number_of_ports(method):
     if method == 'tcp':
-        return 10
+        return max(NUMBER_OF_PORTS, len(get_tcp_port(method)))
     elif method == 'tcps':
-        return 10
-    #elif method == 'tcpa':
-        #return 10
+        return max(NUMBER_OF_PORTS, len(get_tcp_port(method)))
 
 def get_date():
     now = datetime.datetime.now()
     date = now.strftime("%y%m%d")   
     return date
+
+def extract_ipv6_48_prefix(ipv6_addr):
+    """
+    Extract /48 prefix from IPv6 address using string manipulation
+    
+    Args:
+        ipv6_addr: IPv6 address string
+    
+    Returns:
+        str: /48 prefix or None if invalid
+    """
+    # Remove any leading/trailing whitespace
+    addr = ipv6_addr.strip()
+    # Handle compressed notation (::)
+    if '::' in addr:
+        addr = expand_ipv6_address(addr)
+    if not addr:
+        return None
+    # Split by colons and ensure we have 8 groups
+    groups = addr.split(':')
+    if len(groups) != 8:
+        return None
+    # Validate each group (should be hex digits, max 4 chars)
+    for group in groups:
+        if not group or len(group) > 4:
+            return None
+        try:
+            int(group, 16)
+        except ValueError:
+            return None
+    # Extract first 3 groups (48 bits = 3 * 16 bits)
+    prefix_groups = groups[:3]
+    prefix = ':'.join(prefix_groups) + '::/48'
+    return prefix
+
+def expand_ipv6_address(addr):
+    """
+    Expand compressed IPv6 address (handle ::)
+    
+    Args:
+        addr: IPv6 address with possible :: compression
+    
+    Returns:
+        str: Fully expanded IPv6 address
+    """
+    if '::' not in addr:
+        return addr
+    # Split on ::
+    parts = addr.split('::')
+    if len(parts) != 2:
+        return None
+    left_part = parts[0]
+    right_part = parts[1] 
+    # Count existing groups
+    left_groups = left_part.split(':') if left_part else []
+    right_groups = right_part.split(':') if right_part else []
+    # Remove empty strings
+    left_groups = [g for g in left_groups if g]
+    right_groups = [g for g in right_groups if g]
+    # Calculate how many zero groups to insert
+    missing_groups = 8 - len(left_groups) - len(right_groups)
+    # Pad with leading zeros for each group
+    left_groups = [g.zfill(4) for g in left_groups]
+    right_groups = [g.zfill(4) for g in right_groups]
+    # Insert zero groups
+    zero_groups = ['0000'] * missing_groups
+    # Combine all groups
+    all_groups = left_groups + zero_groups + right_groups
+    return ':'.join(all_groups)
+
+def get_port_by_rank():
+    with open(PORT_RANK_FILE, 'r') as f:
+        lines = f.readlines()
+        ports = []
+        for line in lines:
+            ports.append(line.strip())
+    return ports

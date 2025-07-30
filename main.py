@@ -11,13 +11,14 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=39999, help='port of the analyzer, observer, or spoofer')
     parser.add_argument('--if_download', type=lambda x: (str(x).lower() == 'true'), 
                    default=True, help='if download data from s3')
-    parser.add_argument('--test_mode', type=str, default='False', help='test mode')
+    parser.add_argument('--ip_type', type=str, default='ipv4', help='ip version')
     role = parser.parse_args().role
     port = parser.parse_args().port
     if_download = parser.parse_args().if_download
-    test_mode = parser.parse_args().test_mode
+    ip_type = parser.parse_args().ip_type
+
     if role == 'analyzer':
-        vp = analyzer.Analyzer()
+        vp = analyzer.Analyzer(ip_type)
         vp.run(if_download)
     elif role == 'observer':
         vp = observer.Observer()

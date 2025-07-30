@@ -9,23 +9,31 @@ if [ ! -f "$CSV_FILE" ]; then
   exit 1
 fi
 
-# clear existing OUTPUT chain rules
+# clear existing OUTPUT chain rules for both IPv4 and IPv6
+echo "Clearing existing iptables and ip6tables OUTPUT chain rules..."
 iptables -F OUTPUT
+ip6tables -F OUTPUT
 
 # read the CSV file and add rules to drop RST packets on the specified ports
+echo "Adding rules to drop RST packets on specified ports..."
 while IFS=, read -r port
 do
   if [ -n "$port" ]; then
+    # IPv4 rule
     iptables -A OUTPUT -p tcp --sport "$port" --tcp-flags RST RST -j DROP
-    echo "Added rule to drop RST packets on port $port"
+    echo "Added IPv4 rule to drop RST packets on port $port"
+    
+    # IPv6 rule
+    ip6tables -A OUTPUT -p tcp --sport "$port" --tcp-flags RST RST -j DROP
+    echo "Added IPv6 rule to drop RST packets on port $port"
   fi
 done < "$CSV_FILE"
 
-# save the iptables rules
-# CentOS/RHEL
-service iptables save
+# save the iptables rules for Ubuntu/Debian
+echo "Saving iptables rules..."
+iptables-save > /etc/iptables/rules.v4
+ip6tables-save > /etc/iptables/rules.v6
 
-# Debian/Ubuntu
-# iptables-save > /etc/iptables/rules.v4
-
-echo "Rules have been added to drop RST packets on the specified ports."
+echo "Rules have been added to drop RST packets on the specified ports for both IPv4 and IPv6."
+echo "IPv4 rules saved to /etc/iptables/rules.v4"
+echo "IPv6 rules saved to /etc/iptables/rules.v6"

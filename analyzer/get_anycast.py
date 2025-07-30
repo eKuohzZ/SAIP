@@ -7,8 +7,8 @@ import tqdm
 import utils.conf as cf
 import utils.S3BucketUtil as s3bu
 
-def validate_tcp_connection(tcps_result_file, date, experiment_id):
-    data_path = cf.get_data_path(date, experiment_id)
+def validate_tcp_connection(tcps_result_file, date, experiment_id, ip_type):
+    data_path = cf.get_data_path(date, experiment_id, ip_type)
     target2stat = {}
     with open(os.path.join(data_path, 'tcps_result', tcps_result_file)) as ifile:
         lines = ifile.readlines()
@@ -40,9 +40,9 @@ def validate_tcp_connection(tcps_result_file, date, experiment_id):
                 break
     return target2label
 
-def get_anycast_vp(tcp_result_file, date, experiment_id, hitlist):
-    data_path = cf.get_data_path(date, experiment_id)
-    target2conn_label = validate_tcp_connection(tcp_result_file, date, experiment_id)
+def get_anycast_vp(tcp_result_file, date, experiment_id, hitlist, ip_type):
+    data_path = cf.get_data_path(date, experiment_id, ip_type)
+    target2conn_label = validate_tcp_connection(tcp_result_file, date, experiment_id, ip_type)
     target2stat = {}
     with open(os.path.join(data_path, 'tcp_result', tcp_result_file)) as ifile:
         lines = ifile.readlines()
@@ -85,18 +85,18 @@ def get_anycast_vp(tcp_result_file, date, experiment_id, hitlist):
         for target in target2anycast_label:
             if target2anycast_label[target]: print(target, file=ofile)
     #upload to s3
-    s3_anycast_vp_file = 'saip/{}/{}/anycast_vp/{}'.format(date, experiment_id, tcp_result_file)
+    s3_anycast_vp_file = 'saip/{}/{}/{}/anycast_vp/{}'.format(ip_type, date, experiment_id, tcp_result_file)
     print('upload anycast_vp file [{}] to [{}]...'.format(local_anycast_vp_file, s3_anycast_vp_file))
     s3_buket = s3bu.S3Bucket()
     s3_buket.upload_files(s3_anycast_vp_file, local_anycast_vp_file)
 
 
-def get_anycast_vps(date, experiment_id):
-    data_path = cf.get_data_path(date, experiment_id)
+def get_anycast_vps(date, experiment_id, ip_type):
+    data_path = cf.get_data_path(date, experiment_id, ip_type)
     print('filter anycast candidate by saip-tcp...')
     #download hitlist
     s3_buket = s3bu.S3Bucket()
-    s3_hitlist_file = 'saip/{}/{}/hitlist_tcp.csv'.format(date, experiment_id)
+    s3_hitlist_file = 'saip/{}/{}/{}/hitlist_tcp.csv'.format(ip_type, date, experiment_id)
     local_hitlist_file = '{}/hitlist_tcp.csv'.format(data_path)
     print('download hitlist [{}] to [{}]...'.format(s3_hitlist_file, local_hitlist_file))
     s3_buket.download_file(s3_hitlist_file, local_hitlist_file)
@@ -114,10 +114,10 @@ def get_anycast_vps(date, experiment_id):
         local_tcp_result_dir = '{}/tcp{}_result'.format(data_path, flag)
         if not os.path.exists(local_tcp_result_dir):
             os.makedirs(local_tcp_result_dir)
-        tcp_result_filenames = s3_buket.get_list_s3('saip/{}/{}/tcp{}_result'.format(date, experiment_id, flag))
+        tcp_result_filenames = s3_buket.get_list_s3('saip/{}/{}/{}/tcp{}_result'.format(ip_type, date, experiment_id, flag))
         for tcp_result_filename in tcp_result_filenames:
             local_tcp_result_file = '{}/tcp{}_result/{}'.format(data_path, flag, tcp_result_filename)
-            s3_tcp_result_file = 'saip/{}/{}/tcp{}_result/{}'.format(date, experiment_id, flag, tcp_result_filename)
+            s3_tcp_result_file = 'saip/{}/{}/{}/tcp{}_result/{}'.format(ip_type, date, experiment_id, flag, tcp_result_filename)
             s3_buket.download_file(s3_tcp_result_file, local_tcp_result_file)
             if not os.path.exists(local_tcp_result_file[:-3]):
                 subprocess.run(['xz', '-d', local_tcp_result_file])
@@ -125,7 +125,7 @@ def get_anycast_vps(date, experiment_id):
     print('start to identify anycast by saip-tcp...')
     tcp_result_files = os.listdir('{}/tcp_result'.format(data_path))
     for tcp_result_file in tcp_result_files:
-        get_anycast_vp(tcp_result_file, date, experiment_id, tcp_hitlist)
+        get_anycast_vp(tcp_result_file, date, experiment_id, tcp_hitlist, ip_type)
     #get all anycast vp
     anycast_vps = set()
     anycast_dir = '{}/anycast_vp'.format(data_path)
@@ -141,7 +141,7 @@ def get_anycast_vps(date, experiment_id):
         for anycast in anycast_vps:
             print(anycast, file = ofile)
     #upload to s3
-    s3_anycast_vps_file = 'saip/{}/{}/anycast_vps.csv'.format(date, experiment_id)
+    s3_anycast_vps_file = 'saip/{}/{}/{}/anycast_vps.csv'.format(ip_type, date, experiment_id)
     print('upload anycast vps file [{}] to [{}]...'.format(local_anycast_vps_file, s3_anycast_vps_file))
     s3_buket = s3bu.S3Bucket()
     s3_buket.upload_files(s3_anycast_vps_file, local_anycast_vps_file)
